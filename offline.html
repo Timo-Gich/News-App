@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>You're Offline - Currents News</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .offline-container {
+            max-width: 600px;
+            margin: 100px auto;
+            text-align: center;
+            padding: 40px;
+            background: var(--card-bg);
+            border-radius: var(--border-radius);
+            box-shadow: var(--card-shadow);
+        }
+        
+        .offline-icon {
+            font-size: 64px;
+            color: var(--primary-color);
+            margin-bottom: 20px;
+        }
+        
+        .offline-actions {
+            margin-top: 30px;
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .cached-articles {
+            margin-top: 30px;
+            padding: 20px;
+            background: var(--bg-secondary);
+            border-radius: var(--border-radius-sm);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="offline-container">
+        <div class="offline-icon">
+            <i class="fas fa-wifi-slash"></i>
+        </div>
+        <h1>You're Offline</h1>
+        <p>Don't worry! You can still read previously loaded news articles.</p>
+
+        <div class="cached-articles">
+            <h3><i class="fas fa-newspaper"></i> Available Offline</h3>
+            <p>Articles you've previously viewed are available for offline reading.</p>
+            <div id="offline-articles-list"></div>
+        </div>
+
+        <div class="offline-actions">
+            <button onclick="window.history.back()" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Go Back
+            </button>
+            <button onclick="location.reload()" class="btn btn-primary">
+                <i class="fas fa-redo"></i> Retry Connection
+            </button>
+            <button onclick="goHome()" class="btn btn-secondary">
+                <i class="fas fa-home"></i> Home
+            </button>
+        </div>
+
+        <div style="margin-top: 30px; font-size: 14px; color: var(--text-secondary);">
+            <p><i class="fas fa-info-circle"></i> Connect to the internet for latest news</p>
+        </div>
+    </div>
+
+    <script>
+        function goHome() {
+            window.location.href = '/';
+        }
+
+        // Try to load cached articles
+        if ('caches' in window) {
+            caches.open('currents-news-v1.0')
+                .then(cache => cache.keys())
+                .then(requests => {
+                    const apiRequests = requests.filter(req => {
+                        const url = new URL(req.url);
+                        return url.hostname === 'api.currentsapi.services';
+                    });
+
+                    if (apiRequests.length > 0) {
+                        document.getElementById('offline-articles-list').innerHTML =
+                            `<p><i class="fas fa-check-circle"></i> ${apiRequests.length} cached news requests available</p>`;
+                    }
+                });
+        }
+    </script>
+</body>
+
+</html>

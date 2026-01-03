@@ -1,0 +1,138 @@
+# ===========================================
+# Currents News App - .gitignore
+# ===========================================
+
+
+# ⚠️ API KEYS & SECRETS (DO NOT COMMIT THESE!)
+# ===========================================
+.env
+.env.local
+.env.development
+.env.production
+.env.*
+config.js
+secrets.js
+api-keys.json
+keys.json
+credentials.json
+*.key
+*.pem
+secrets/
+private/
+auth.json
+
+
+# 📁 DEPENDENCIES
+# ===========================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+
+# 💻 OPERATING SYSTEM FILES
+# ===========================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+.Spotlight-V100
+.Trashes
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+
+
+# 🛠️ EDITOR & IDE FILES
+# ===========================================
+# VS Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# JetBrains IDEs
+.idea/
+*.iws
+*.iml
+*.ipr
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Sublime Text
+*.sublime-workspace
+*.sublime-project
+
+
+# 📦 BUILD OUTPUTS
+# ===========================================
+dist/
+build/
+out/
+.next/
+.nuxt/
+.cache/
+public/bundle.js
+public/bundle.js.map
+
+
+# 📊 LOGS
+# ===========================================
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+
+# 🗑️ TEMPORARY FILES
+# ===========================================
+tmp/
+temp/
+*.tmp
+*.temp
+
+
+# 🧪 TESTING
+# ===========================================
+coverage/
+.nyc_output/
+*.lcov
+
+
+# 🖼️ IMAGE CACHE/THUMBNAILS
+# ===========================================
+.cache/
+.thumbs/
+
+
+# 🔧 MISC
+# ===========================================
+*.zip
+*.tar.gz
+*.rar
+
+# Service worker generated files
+service-worker.js
+sw.js
+
+# Local Netlify folder
+.netlify
+
+# Service Worker generated files
+sw.js
+service-worker.js
+workbox-*.js
