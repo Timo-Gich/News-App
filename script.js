@@ -219,9 +219,9 @@ class CurrentsNewsApp {
 
         // Listen for beforeinstallprompt event
         window.addEventListener('beforeinstallprompt', (e) => {
-            e.preventDefault();
             this.deferredPrompt = e;
             this.showInstallButton();
+            // Remove e.preventDefault() unless you want to control WHEN to show it
         });
 
         // Listen for app installed event
