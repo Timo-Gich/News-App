@@ -1140,3 +1140,5 @@ class CurrentsNewsApp {
 document.addEventListener('DOMContentLoaded', () => {
     window.newsApp = new CurrentsNewsApp();
 });
+
+const hash = window.location.hash; // "#/latest" or "#/search"

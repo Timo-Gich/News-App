@@ -47,14 +47,14 @@
             "name": "Latest News",
             "short_name": "Latest",
             "description": "View latest news articles",
-            "url": "/?source=latest",
+            "url": "/#/latest",
             "icons": [{ "src": "https://img.icons8.com/color/96/000000/news.png", "sizes": "96x96" }]
         },
         {
             "name": "Search News",
             "short_name": "Search",
             "description": "Search for news articles",
-            "url": "/?source=search",
+            "url": "/#/search",
             "icons": [{ "src": "https://img.icons8.com/color/96/000000/search.png", "sizes": "96x96" }]
         }
     ],
