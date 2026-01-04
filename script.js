@@ -1142,3 +1142,76 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 const hash = window.location.hash; // "#/latest" or "#/search"
+
+// Register Service Worker with update detection
+function registerServiceWorker() {
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js')
+            .then(registration => {
+                console.log('ServiceWorker registered');
+                
+                // Check for updates
+                registration.addEventListener('updatefound', () => {
+                    const newWorker = registration.installing;
+                    console.log('New Service Worker found!');
+                    
+                    newWorker.addEventListener('statechange', () => {
+                        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                            // New update available
+                            this.showUpdateNotification();
+                        }
+                    });
+                });
+                
+                // Check for updates every hour
+                setInterval(() => {
+                    registration.update();
+                }, 60 * 60 * 1000);
+            })
+            .catch(error => {
+                console.log('ServiceWorker registration failed:', error);
+            });
+    }
+}
+
+function showUpdateNotification() {
+    // Create update toast
+    const toast = document.createElement('div');
+    toast.className = 'toast update-toast';
+    toast.innerHTML = `
+        <div class="toast-icon">
+            <i class="fas fa-sync-alt"></i>
+        </div>
+        <div class="toast-message">
+            <strong>Update Available!</strong>
+            <p>New version ready. Refresh to update.</p>
+        </div>
+        <div class="toast-actions">
+            <button id="refresh-app" class="btn btn-sm btn-primary">
+                Refresh Now
+            </button>
+            <button class="toast-close">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    `;
+    
+    document.getElementById('toast-container').appendChild(toast);
+    
+    // Add refresh button handler
+    document.getElementById('refresh-app').addEventListener('click', () => {
+        window.location.reload();
+    });
+    
+    // Add close button handler
+    toast.querySelector('.toast-close').addEventListener('click', () => {
+        toast.remove();
+    });
+    
+    // Auto-remove after 30 seconds
+    setTimeout(() => {
+        if (toast.parentNode) {
+            toast.remove();
+        }
+    }, 30000);
+}

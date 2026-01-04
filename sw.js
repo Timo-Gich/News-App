@@ -1,6 +1,6 @@
 // sw.js - Service Worker for Offline News App
 
-const CACHE_NAME = 'currents-news-v1.0';
+const CACHE_NAME = 'currents-news-v1.1';
 const OFFLINE_URL = 'offline.html';
 
 // Files to cache immediately on install
@@ -32,6 +32,22 @@ self.addEventListener('install', event => {
 });
 
 // Activate event - clean up old caches
+
+self.addEventListener('activate', event => {
+    event.waitUntil(
+        self.clients.matchAll().then(clients => {
+            // Send message to all open tabs/windows
+            clients.forEach(client => {
+                client.postMessage({
+                    type: 'SW_UPDATED',
+                    version: '1.1',
+                    message: 'New version available. Please refresh.'
+                });
+            });
+        })
+    );
+});
+
 self.addEventListener('activate', event => {
     console.log('Service Worker: Activating...');
 
@@ -53,6 +69,29 @@ self.addEventListener('activate', event => {
 });
 
 // Fetch event - serve from cache if offline
+self.addEventListener('fetch', event => {
+    const url = new URL(event.request.url);
+
+    // Fix for PWA routing - serve index.html for all navigation requests
+    if (event.request.mode === 'navigate') {
+        event.respondWith(
+            caches.match('/index.html')
+            .then(response => {
+                if (response) {
+                    return response;
+                }
+                return fetch(event.request);
+            })
+            .catch(() => {
+                return caches.match('/offline.html');
+            })
+        );
+        return;
+    }
+
+    // ... rest of your fetch event code
+});
+
 self.addEventListener('fetch', event => {
     const { request } = event;
     const url = new URL(request.url);
