@@ -1,8 +1,25 @@
-// Enhanced Service Worker for Offline News App - v2.0
-// MAINTAINED STRUCTURE: Same events, enhanced logic
+// Enhanced Service Worker for Offline News App - v3.0
+// AUTOMATIC UPDATES: Added versioning and update detection
 
-const CACHE_NAME = 'currents-news-v2.0';
+const CACHE_NAME = 'currents-news-v3.0';
 const OFFLINE_URL = 'offline.html';
+const VERSION = '3.0.0';
+
+// Update configuration
+const UPDATE_CONFIG = {
+    checkInterval: 30 * 60 * 1000, // 30 minutes
+    maxRetries: 3,
+    retryDelay: 5000, // 5 seconds
+    backgroundUpdate: true
+};
+
+// Version metadata
+const VERSION_INFO = {
+    version: VERSION,
+    buildDate: new Date().toISOString(),
+    features: ['automatic-updates', 'enhanced-caching', 'offline-capabilities'],
+    cacheName: CACHE_NAME
+};
 
 // === ENHANCED: Added versioning and more assets ===
 const STATIC_CACHE_URLS = [
@@ -124,7 +141,7 @@ self.addEventListener('activate', event => {
                 clients.forEach(client => {
                     client.postMessage({
                         type: 'SW_UPDATED',
-                        version: '2.0',
+                        version: VERSION_INFO.version,
                         message: 'Offline capabilities enhanced'
                     });
                 });
@@ -524,6 +541,120 @@ self.addEventListener('notificationclick', event => {
     );
 });
 
+// === NEW: Automatic Update Detection ===
+let updateCheckTimer = null;
+let updateInProgress = false;
+let updateRetries = 0;
+
+// Check for updates periodically
+function startUpdateCheck() {
+    if (updateCheckTimer) return;
+
+    updateCheckTimer = setInterval(async() => {
+        if (updateInProgress) return;
+
+        try {
+            await checkForUpdates();
+        } catch (error) {
+            console.log('Update check failed:', error);
+        }
+    }, UPDATE_CONFIG.checkInterval);
+}
+
+// Check if a new version is available
+async function checkForUpdates() {
+    try {
+        // Check if service worker has updated
+        const registration = await navigator.serviceWorker.getRegistration();
+        if (registration && registration.waiting) {
+            console.log('Service Worker: New version available');
+
+            // Notify clients about update
+            notifyClients({
+                type: 'UPDATE_AVAILABLE',
+                version: VERSION_INFO.version,
+                message: 'A new version is available',
+                action: 'update'
+            });
+
+            return true;
+        }
+
+        // Check for manifest changes or other update indicators
+        const updateCheckUrl = '/manifest.json?' + Date.now();
+        const response = await fetch(updateCheckUrl, { cache: 'no-cache' });
+
+        if (response.ok) {
+            const manifest = await response.json();
+            // Compare with current version info
+            if (manifest.version && manifest.version !== VERSION_INFO.version) {
+                console.log('Service Worker: Version mismatch detected');
+                return true;
+            }
+        }
+
+        return false;
+    } catch (error) {
+        console.log('Service Worker: Update check failed:', error);
+        return false;
+    }
+}
+
+// Notify all clients about updates
+function notifyClients(message) {
+    self.clients.matchAll().then(clients => {
+        clients.forEach(client => {
+            client.postMessage(message);
+        });
+    });
+}
+
+// Handle update installation
+async function installUpdate() {
+    if (updateInProgress) return false;
+
+    updateInProgress = true;
+
+    try {
+        // Trigger service worker update
+        const registration = await navigator.serviceWorker.getRegistration();
+        if (registration && registration.waiting) {
+            // Skip waiting and activate new service worker
+            registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+
+            notifyClients({
+                type: 'UPDATE_INSTALLED',
+                version: VERSION_INFO.version,
+                message: 'Update installed successfully'
+            });
+
+            return true;
+        }
+
+        return false;
+    } catch (error) {
+        console.log('Service Worker: Update installation failed:', error);
+        return false;
+    } finally {
+        updateInProgress = false;
+    }
+}
+
+// Handle update retry logic
+async function handleUpdateRetry() {
+    if (updateRetries >= UPDATE_CONFIG.maxRetries) {
+        console.log('Service Worker: Max update retries reached');
+        updateRetries = 0;
+        return false;
+    }
+
+    updateRetries++;
+    console.log(`Service Worker: Retrying update (${updateRetries}/${UPDATE_CONFIG.maxRetries})`);
+
+    await new Promise(resolve => setTimeout(resolve, UPDATE_CONFIG.retryDelay));
+    return await checkForUpdates();
+}
+
 // === NEW: Message handler for communication with main app ===
 self.addEventListener('message', event => {
     console.log('Service Worker: Received message', event.data);
@@ -564,5 +695,106 @@ self.addEventListener('message', event => {
                     event.ports[0].postMessage({ success: false, error: error.message });
                 });
             break;
+
+            // === NEW: Update-related messages ===
+        case 'CHECK_FOR_UPDATES':
+            checkForUpdates().then(hasUpdate => {
+                event.ports[0].postMessage({
+                    success: true,
+                    hasUpdate: hasUpdate,
+                    version: VERSION_INFO.version
+                });
+            }).catch(error => {
+                event.ports[0].postMessage({
+                    success: false,
+                    error: error.message
+                });
+            });
+            break;
+
+        case 'INSTALL_UPDATE':
+            installUpdate().then(success => {
+                event.ports[0].postMessage({
+                    success: success,
+                    message: success ? 'Update installed' : 'No update available'
+                });
+            }).catch(error => {
+                event.ports[0].postMessage({
+                    success: false,
+                    error: error.message
+                });
+            });
+            break;
+
+        case 'SKIP_WAITING':
+            self.skipWaiting();
+            break;
+
+        case 'GET_VERSION_INFO':
+            event.ports[0].postMessage({
+                success: true,
+                versionInfo: VERSION_INFO
+            });
+            break;
+
+        case 'START_UPDATE_CHECK':
+            startUpdateCheck();
+            event.ports[0].postMessage({
+                success: true,
+                message: 'Update check started'
+            });
+            break;
+
+        case 'STOP_UPDATE_CHECK':
+            if (updateCheckTimer) {
+                clearInterval(updateCheckTimer);
+                updateCheckTimer = null;
+            }
+            event.ports[0].postMessage({
+                success: true,
+                message: 'Update check stopped'
+            });
+            break;
     }
+});
+
+// === NEW: Enhanced Activate Event with Update Notifications ===
+self.addEventListener('activate', event => {
+    console.log('Service Worker v3.0: Activating with update capabilities...');
+
+    event.waitUntil(
+        Promise.all([
+            // Clean up old caches (keep only current version)
+            caches.keys().then(cacheNames => {
+                return Promise.all(
+                    cacheNames.map(cacheName => {
+                        if (cacheName !== CACHE_NAME) {
+                            console.log('Service Worker: Deleting old cache:', cacheName);
+                            return caches.delete(cacheName);
+                        }
+                    })
+                );
+            }),
+
+            // Claim clients immediately
+            self.clients.claim(),
+
+            // Send message to all clients about new version
+            self.clients.matchAll().then(clients => {
+                clients.forEach(client => {
+                    client.postMessage({
+                        type: 'SW_UPDATED',
+                        version: VERSION_INFO.version,
+                        message: 'App updated with automatic update capabilities',
+                        features: VERSION_INFO.features
+                    });
+                });
+            }),
+
+            // Start update checking
+            startUpdateCheck()
+        ]).then(() => {
+            console.log('Service Worker v3.0: Activation complete with update monitoring');
+        })
+    );
 });

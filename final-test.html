@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Final Service Worker Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f8fafc;
+        }
+        
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+        
+        h1 {
+            color: #1e293b;
+            border-bottom: 2px solid #3b82f6;
+            padding-bottom: 10px;
+        }
+        
+        h2 {
+            color: #334155;
+            margin-top: 30px;
+        }
+        
+        .status-box {
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            font-weight: 500;
+        }
+        
+        .status-success {
+            background-color: #dcfce7;
+            color: #166534;
+            border: 1px solid #bbf7d0;
+        }
+        
+        .status-error {
+            background-color: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fecaca;
+        }
+        
+        .status-warning {
+            background-color: #fff3cd;
+            color: #92400e;
+            border: 1px solid #fde68a;
+        }
+        
+        .status-info {
+            background-color: #e0f2fe;
+            color: #0369a1;
+            border: 1px solid #b3e5fc;
+        }
+        
+        .test-result {
+            background-color: #f1f5f9;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 10px;
+            margin: 10px 0;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        
+        button {
+            background-color: #3b82f6;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 5px;
+            transition: background-color 0.2s;
+        }
+        
+        button:hover {
+            background-color: #2563eb;
+        }
+        
+        button.secondary {
+            background-color: #64748b;
+        }
+        
+        button.secondary:hover {
+            background-color: #475569;
+        }
+        
+        button.success {
+            background-color: #10b981;
+        }
+        
+        button.success:hover {
+            background-color: #059669;
+        }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 15px 0;
+        }
+        
+        .stat-card {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #1e293b;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            color: #64748b;
+            text-transform: uppercase;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background-color: #e2e8f0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background-color: #3b82f6;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        
+        .footer-note {
+            font-size: 12px;
+            color: #64748b;
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f1f5f9;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="card">
+        <h1>🚀 Final Service Worker Test</h1>
+        <p>Comprehensive test for the automatic update system. This page will help diagnose and fix any service worker issues.</p>
+
+        <div id="init-status" class="status-box status-info">
+            🔄 Initializing Service Worker Manager...
+        </div>
+
+        <div class="grid">
+            <div class="stat-card">
+                <div class="stat-value" id="sw-status">❓</div>
+                <div class="stat-label">Service Worker</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="version-status">❓</div>
+                <div class="stat-label">Version</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="cache-status">❓</div>
+                <div class="stat-label">Cache</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="update-status">❓</div>
+                <div class="stat-label">Updates</div>
+            </div>
+        </div>
+
+        <div class="progress-bar">
+            <div class="progress-fill" id="test-progress"></div>
+        </div>
+
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <button onclick="runAllTests()" class="success">🧪 Run All Tests</button>
+            <button onclick="serviceWorkerManager.testServiceWorker()">🔍 Basic Test</button>
+            <button onclick="serviceWorkerManager.testVersionInfo()">📋 Version Test</button>
+            <button onclick="serviceWorkerManager.testCacheInfo()">💾 Cache Test</button>
+            <button onclick="serviceWorkerManager.testUpdateDetection()">🔄 Update Test</button>
+            <button onclick="serviceWorkerManager.refreshPage()" class="secondary">♻️ Refresh SW</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>📊 Test Results</h2>
+        <div id="test-results" class="test-result">
+            Click "Run All Tests" to start comprehensive testing...
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>🔧 Manual Controls</h2>
+        <p>Use these controls if automatic tests fail:</p>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+            <div>
+                <h3>Service Worker Actions</h3>
+                <button onclick="checkSWDirectly()">Check SW Directly</button>
+                <button onclick="forceSWUpdate()">Force SW Update</button>
+                <button onclick="clearSW()">Clear SW</button>
+            </div>
+            <div>
+                <h3>Cache Actions</h3>
+                <button onclick="clearCache()">Clear Cache</button>
+                <button onclick="checkCache()">Check Cache</button>
+            </div>
+            <div>
+                <h3>Page Actions</h3>
+                <button onclick="location.reload()">Reload Page</button>
+                <button onclick="hardReload()">Hard Reload</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer-note">
+        <strong>💡 Troubleshooting Tips:</strong><br> • If tests fail, try refreshing the page first<br> • Make sure you're using HTTPS (required for service workers)<br> • Check browser console for detailed error messages<br> • Clear browser cache if
+        issues persist<br> • The service worker needs to be refreshed to pick up new versions
+    </div>
+
+    <!-- Include the service worker manager -->
+    <script src="service-worker-setup.js"></script>
+
+    <script>
+        // Enhanced test results display
+        let testResults = [];
+        let testProgress = 0;
+
+        // Update status indicators
+        function updateStatusIndicators() {
+            const swStatus = document.getElementById('sw-status');
+            const versionStatus = document.getElementById('version-status');
+            const cacheStatus = document.getElementById('cache-status');
+            const updateStatus = document.getElementById('update-status');
+
+            // Basic SW status
+            if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+                swStatus.textContent = '✅ Active';
+                swStatus.parentElement.className = 'stat-card status-success';
+            } else if (navigator.serviceWorker) {
+                swStatus.textContent = '⚠️ Inactive';
+                swStatus.parentElement.className = 'stat-card status-warning';
+            } else {
+                swStatus.textContent = '❌ Not Supported';
+                swStatus.parentElement.className = 'stat-card status-error';
+            }
+
+            // Version status (will be updated after tests)
+            versionStatus.textContent = '⏳ Testing...';
+            cacheStatus.textContent = '⏳ Testing...';
+            updateStatus.textContent = '⏳ Testing...';
+        }
+
+        // Run comprehensive tests
+        async function runAllTests() {
+            const resultsDiv = document.getElementById('test-results');
+            const initStatus = document.getElementById('init-status');
+
+            testResults = [];
+            testProgress = 0;
+            updateProgress(0);
+
+            initStatus.className = 'status-box status-info';
+            initStatus.textContent = '🔄 Running comprehensive tests...';
+            resultsDiv.innerHTML = 'Starting tests...';
+
+            try {
+                // Test 1: Basic Service Worker
+                updateProgress(20);
+                initStatus.textContent = '🔍 Testing Service Worker...';
+                const swResults = await serviceWorkerManager.testServiceWorker();
+                testResults.push('📋 Basic Service Worker Test:');
+                testResults.push(...swResults);
+                testResults.push('');
+
+                // Test 2: Version Info
+                updateProgress(40);
+                initStatus.textContent = '📋 Testing Version Info...';
+                const versionResult = await serviceWorkerManager.testVersionInfo();
+                testResults.push('📋 Version Info Test:');
+                testResults.push(versionResult);
+                testResults.push('');
+
+                // Test 3: Cache Info
+                updateProgress(60);
+                initStatus.textContent = '💾 Testing Cache...';
+                const cacheResult = await serviceWorkerManager.testCacheInfo();
+                testResults.push('📋 Cache Info Test:');
+                testResults.push(cacheResult);
+                testResults.push('');
+
+                // Test 4: Update Detection
+                updateProgress(80);
+                initStatus.textContent = '🔄 Testing Update Detection...';
+                const updateResult = await serviceWorkerManager.testUpdateDetection();
+                testResults.push('📋 Update Detection Test:');
+                testResults.push(updateResult);
+                testResults.push('');
+
+                // Final status
+                updateProgress(100);
+                initStatus.className = 'status-box status-success';
+                initStatus.textContent = '✅ All tests completed!';
+
+                // Update individual status cards
+                updateStatusCards();
+
+            } catch (error) {
+                updateProgress(100);
+                initStatus.className = 'status-box status-error';
+                initStatus.textContent = `❌ Test failed: ${error.message}`;
+                testResults.push(`❌ Critical error: ${error.message}`);
+            }
+
+            // Display results
+            resultsDiv.innerHTML = testResults.join('<br>');
+        }
+
+        function updateProgress(percentage) {
+            const progressFill = document.getElementById('test-progress');
+            progressFill.style.width = `${percentage}%`;
+        }
+
+        function updateStatusCards() {
+            // This would be updated based on test results
+            // For now, we'll update based on basic checks
+            setTimeout(() => {
+                const versionStatus = document.getElementById('version-status');
+                const cacheStatus = document.getElementById('cache-status');
+                const updateStatus = document.getElementById('update-status');
+
+                versionStatus.textContent = '✅ Tested';
+                cacheStatus.textContent = '✅ Tested';
+                updateStatus.textContent = '✅ Tested';
+            }, 1000);
+        }
+
+        // Manual control functions
+        async function checkSWDirectly() {
+            const resultsDiv = document.getElementById('test-results');
+
+            try {
+                const registration = await navigator.serviceWorker.getRegistration();
+                let result = '🔍 Direct Service Worker Check:<br>';
+
+                if (registration) {
+                    result += `✅ Registered: ${registration.scope}<br>`;
+                    result += `✅ Active: ${registration.active ? 'Yes' : 'No'}<br>`;
+                    result += `✅ Waiting: ${registration.waiting ? 'Yes' : 'No'}<br>`;
+                    result += `✅ Installing: ${registration.installing ? 'Yes' : 'No'}<br>`;
+                } else {
+                    result += '❌ No registration found<br>';
+                }
+
+                if (navigator.serviceWorker.controller) {
+                    result += '✅ Controller active<br>';
+                } else {
+                    result += '⚠️ No controller<br>';
+                }
+
+                resultsDiv.innerHTML = result;
+            } catch (error) {
+                resultsDiv.innerHTML = `❌ Direct check failed: ${error.message}`;
+            }
+        }
+
+        async function forceSWUpdate() {
+            const resultsDiv = document.getElementById('test-results');
+
+            try {
+                const registration = await navigator.serviceWorker.getRegistration();
+                if (registration) {
+                    await registration.update();
+                    resultsDiv.innerHTML = '✅ Service Worker update check triggered';
+                } else {
+                    resultsDiv.innerHTML = '❌ No service worker registration found';
+                }
+            } catch (error) {
+                resultsDiv.innerHTML = `❌ Update failed: ${error.message}`;
+            }
+        }
+
+        async function clearSW() {
+            const resultsDiv = document.getElementById('test-results');
+
+            try {
+                const registrations = await navigator.serviceWorker.getRegistrations();
+                let cleared = 0;
+
+                for (const registration of registrations) {
+                    await registration.unregister();
+                    cleared++;
+                }
+
+                resultsDiv.innerHTML = `✅ Cleared ${cleared} service worker(s). Refresh page to re-register.`;
+            } catch (error) {
+                resultsDiv.innerHTML = `❌ Clear failed: ${error.message}`;
+            }
+        }
+
+        async function clearCache() {
+            const resultsDiv = document.getElementById('test-results');
+
+            try {
+                const cacheNames = await caches.keys();
+                let cleared = 0;
+
+                for (const cacheName of cacheNames) {
+                    await caches.delete(cacheName);
+                    cleared++;
+                }
+
+                resultsDiv.innerHTML = `✅ Cleared ${cleared} cache(s).`;
+            } catch (error) {
+                resultsDiv.innerHTML = `❌ Cache clear failed: ${error.message}`;
+            }
+        }
+
+        function checkCache() {
+            const resultsDiv = document.getElementById('test-results');
+
+            caches.keys().then(cacheNames => {
+                let result = '💾 Cache Check:<br>';
+                if (cacheNames.length > 0) {
+                    result += `✅ Found ${cacheNames.length} cache(s):<br>`;
+                    cacheNames.forEach(name => {
+                        result += `  - ${name}<br>`;
+                    });
+                } else {
+                    result += '⚠️ No caches found';
+                }
+                resultsDiv.innerHTML = result;
+            }).catch(error => {
+                resultsDiv.innerHTML = `❌ Cache check failed: ${error.message}`;
+            });
+        }
+
+        function hardReload() {
+            // Clear cache and reload
+            caches.keys().then(cacheNames => {
+                Promise.all(cacheNames.map(name => caches.delete(name))).then(() => {
+                    location.reload(true);
+                });
+            });
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            updateStatusIndicators();
+
+            // Wait a bit for service worker to initialize
+            setTimeout(() => {
+                updateStatusIndicators();
+            }, 2000);
+        });
+    </script>
+</body>
+
+</html>

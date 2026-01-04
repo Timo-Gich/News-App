@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Service Worker Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+        
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        
+        .warning {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        
+        .info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+        }
+        
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        
+        button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="card">
+        <h2>🔧 Simple Service Worker Test</h2>
+        <p>Testing basic service worker functionality for automatic updates.</p>
+
+        <div id="status" class="status info">Checking service worker status...</div>
+
+        <button onclick="checkSW()">Check Service Worker</button>
+        <button onclick="checkVersion()">Check Version</button>
+        <button onclick="refreshPage()">Refresh Page</button>
+
+        <div id="results" style="margin-top: 20px; font-family: monospace; background: #f8f9fa; padding: 10px; border-radius: 4px;"></div>
+    </div>
+
+    <script>
+        let swRegistration = null;
+        let swController = null;
+
+        async function checkSW() {
+            const status = document.getElementById('status');
+            const results = document.getElementById('results');
+
+            try {
+                if (!('serviceWorker' in navigator)) {
+                    throw new Error('Service Worker not supported in this browser');
+                }
+
+                swRegistration = await navigator.serviceWorker.getRegistration();
+
+                if (!swRegistration) {
+                    throw new Error('No service worker registration found');
+                }
+
+                swController = swRegistration.active || swRegistration.waiting || swRegistration.installing;
+
+                status.className = 'status success';
+                status.textContent = '✅ Service Worker Found';
+
+                results.innerHTML = `
+                    <strong>Service Worker Details:</strong><br>
+                    Scope: ${swRegistration.scope}<br>
+                    Active: ${swRegistration.active ? 'Yes' : 'No'}<br>
+                    Waiting: ${swRegistration.waiting ? 'Yes' : 'No'}<br>
+                    Installing: ${swRegistration.installing ? 'Yes' : 'No'}<br>
+                    Controller: ${navigator.serviceWorker.controller ? 'Active' : 'None'}
+                `;
+
+                // Test message sending
+                if (swController) {
+                    testMessageSending();
+                }
+
+            } catch (error) {
+                status.className = 'status error';
+                status.textContent = '❌ ' + error.message;
+                results.innerHTML = '';
+            }
+        }
+
+        async function checkVersion() {
+            const results = document.getElementById('results');
+
+            if (!swController) {
+                results.innerHTML = 'No service worker controller found. Run "Check Service Worker" first.';
+                return;
+            }
+
+            try {
+                // Send version request
+                swController.postMessage({
+                    type: 'GET_VERSION_INFO'
+                });
+
+                // Wait for response
+                const response = await new Promise((resolve, reject) => {
+                    const timeout = setTimeout(() => {
+                        reject(new Error('Timeout waiting for version response'));
+                    }, 3000);
+
+                    const messageHandler = (event) => {
+                        if (event.data.type === 'GET_VERSION_INFO') {
+                            clearTimeout(timeout);
+                            navigator.serviceWorker.removeEventListener('message', messageHandler);
+                            resolve(event.data);
+                        }
+                    };
+
+                    navigator.serviceWorker.addEventListener('message', messageHandler);
+                });
+
+                if (response.success) {
+                    const info = response.versionInfo;
+                    results.innerHTML += `
+                        <br><br><strong>Version Information:</strong><br>
+                        Version: ${info.version}<br>
+                        Build Date: ${info.buildDate}<br>
+                        Features: ${info.features.join(', ')}<br>
+                        Cache Name: ${info.cacheName}
+                    `;
+                } else {
+                    throw new Error('Failed to get version info: ' + response.error);
+                }
+
+            } catch (error) {
+                results.innerHTML += `<br><br><span style="color: red;">❌ Version Check Failed: ${error.message}</span>`;
+            }
+        }
+
+        function testMessageSending() {
+            const results = document.getElementById('results');
+
+            try {
+                swController.postMessage({
+                    type: 'TEST_MESSAGE'
+                });
+                results.innerHTML += '<br><br>📡 Test message sent to service worker';
+            } catch (error) {
+                results.innerHTML += `<br><br><span style="color: red;">❌ Failed to send test message: ${error.message}</span>`;
+            }
+        }
+
+        function refreshPage() {
+            location.reload();
+        }
+
+        // Auto-check on load
+        window.addEventListener('load', () => {
+            setTimeout(checkSW, 1000);
+        });
+    </script>
+</body>
+
+</html>

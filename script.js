@@ -1084,12 +1084,334 @@ class CurrentsNewsApp {
     handleServiceWorkerMessage(data) {
         switch (data.type) {
             case 'SW_UPDATED':
-                this.showToast('App updated with new offline features!', 'success');
+                this.showToast(`App updated to version ${data.version}!`, 'success');
+                break;
+            case 'UPDATE_AVAILABLE':
+                this.showUpdateAvailableNotification(data);
+                break;
+            case 'UPDATE_INSTALLED':
+                this.showToast('Update installed successfully', 'success');
+                this.reloadApp();
+                break;
+                case 'UPDATE_CHECK_FAILED':
+                this.showToast('Update check failed', 'warning');
                 break;
             case 'SYNC_COMPLETE':
-                this.showToast('Articles synced in background', 'info');
                 this.updateOfflineStats();
                 break;
+        }
+    }
+
+    // === NEW: Update notification system ===
+    showUpdateNotification() {
+        const notificationContainer = document.createElement('div');
+        notificationContainer.className = 'update-notification';
+        notificationContainer.innerHTML = `
+            <div class="update-toast">
+                <i class="fas fa-download"></i>
+                <div class="update-content">
+                    <div class="update-title">New Version Available</div>
+                    <div class="update-message">A new version of Currents News is available. Your changes will be saved.</div>
+                    <div class="update-actions">
+                        <button class="btn btn-sm btn-primary update-btn">Update Now</button>
+                        <button class="btn btn-sm btn-secondary">Remind Me Later</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Add to body
+        document.body.appendChild(notificationContainer);
+        
+        // Add CSS
+        this.addUpdateNotificationStyles();
+        
+        // Set up event listeners
+        this.setupUpdateNotificationListeners(notificationContainer);
+        
+        // Auto-hide after 10 seconds
+        setTimeout(() => {
+            this.hideUpdateNotification(notificationContainer);
+        }, 10000);
+    }
+
+    showUpdateAvailableNotification(data) {
+        console.log('Update available:', data);
+        
+        // Only show update notification if not already shown
+        if (!document.querySelector('.update-notification')) {
+            this.showUpdateNotification();
+        }
+    }
+
+    addUpdateNotificationStyles() {
+        if (document.getElementById('update-notification-styles')) return;
+        
+        const style = document.createElement('style');
+        style.id = 'update-notification-styles';
+        style.textContent = `
+            .update-notification {
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                z-index: 9999;
+                animation: slideInDown 0.3s ease-out;
+            }
+            
+            .update-toast {
+                background: linear-gradient(135deg, #10b98d, #059666);
+                color: white;
+                border-radius: 12px;
+                padding: 15px 20px;
+                display: flex;
+                align-items: center;
+                box-shadow: 0 8px 25px rgba(16, 185, 221, 0.3);
+                max-width: 400px;
+                animation: slideInRight 0.3s ease-out;
+                animation-fill-mode: both;
+                opacity: 0;
+                animation-delay: 0.1s;
+            }
+            
+            .update-content {
+                flex: 1;
+                margin-left: 15px;
+            }
+            
+            .update-title {
+                font-weight: 600;
+                font-size: 16px;
+                margin: 0 0 4px 0;
+            }
+            
+            .update-message {
+                font-size: 14px;
+                opacity: 0.9;
+                margin: 0 0 10px 0;
+            }
+            
+            .update-actions {
+                display: flex;
+                gap: 10px;
+            }
+            
+            .update-btn {
+                padding: 6px 12px;
+                font-size: 12px;
+                font-weight: 500;
+                border-radius: 6px;
+                border: none;
+                cursor: pointer;
+                transition: all 0.2s ease;
+            }
+            
+            .update-btn:hover {
+                transform: translateY(-1px);
+                box-shadow: 0 4px 12px rgba(16, 154, 255, 0.3);
+            }
+            
+            .update-btn:active {
+                transform: translateY(0);
+            }
+            
+            @keyframes slideInDown {
+                from {
+                    opacity: 0;
+                    transform: translateY(-20px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+            
+            @keyframes slideInRight {
+                from {
+                    opacity: 0;
+                    transform: translateX(20px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateX(0);
+                    display: block;
+                }
+            }
+            
+            @media (max-width: 768px) {
+                .update-notification {
+                    left: 20px;
+                    right: 20px;
+                }
+                
+                .update-toast {
+                    flex-direction: column;
+                    align-items: stretch;
+                    padding: 15px;
+                }
+                
+                .update-actions {
+                    justify-content: space-between;
+                    margin-top: 10px;
+                }
+            }
+        `;
+        
+        document.head.appendChild(style);
+    }
+
+    setupUpdateNotificationStyles() {
+        // Add the styles
+        this.addUpdateNotificationStyles();
+    }
+
+    setupUpdateNotificationListeners(container) {
+        const updateBtn = container.querySelector('.update-btn');
+        const laterBtn = container.querySelector('.update-btn:last-child');
+        
+        // Update now
+        updateBtn.addEventListener('click', async () => {
+            try {
+                await this.installUpdate();
+                this.hideUpdateNotification(container);
+            } catch (error) {
+                this.showToast('Failed to install update', 'error');
+            }
+        });
+        
+        // Remind later
+        laterBtn.addEventListener('click', () => {
+            this.hideUpdateNotification(container);
+        });
+        
+        // Close on click outside
+        container.addEventListener('click', (e) => {
+            if (e.target === container) {
+                this.hideUpdateNotification(container);
+            }
+        });
+    }
+
+    hideUpdateNotification(container) {
+        if (container) {
+            container.style.animation = 'slideOutRight 0.3s ease-in';
+            container.addEventListener('animationend', () => {
+                if (container.parentElement) {
+                    container.remove();
+                }
+            });
+        }
+    }
+
+    // === Update management methods ===
+    async checkForUpdates() {
+        try {
+            const response = await fetch('/sw.js?' + Date.now());
+            const swCode = await response.text();
+            
+            // Simple version check
+            const versionMatch = swCode.match(/VERSION = ['"]([^'"]+)['"]/);
+            const currentVersion = versionMatch ? versionMatch[1] : 'unknown';
+            
+            if (currentVersion !== this.currentVersion) {
+                this.showUpdateAvailable();
+                this.newVersionAvailable = true;
+            }
+        } catch (error) {
+            console.log('Update check failed:', error);
+        }
+    }
+
+    async installUpdate() {
+        try {
+            if ('serviceWorker' in navigator) {
+                const registration = await navigator.serviceWorker.ready;
+                
+                if (registration.waiting) {
+                    // Show loading state
+                    this.showUpdateProgress();
+                    
+                    // Install update
+                    registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+                    
+                    // Wait for the new service worker to activate
+                    const activationPromise = new Promise((resolve) => {
+                        registration.waiting.addEventListener('statechange', (event) => {
+                            if (registration.waiting.state === 'activated') {
+                                resolve();
+                            }
+                        });
+                    });
+                    
+                    await activationPromise;
+                    
+                    // Reload the page to complete the update
+                    window.location.reload();
+                }
+            }
+        } catch (error) {
+            console.error('Update installation failed:', error);
+            throw error;
+        }
+    }
+
+    showUpdateProgress() {
+        this.showToast('Installing update...', 'info');
+    }
+
+    async performUpdate() {
+        try {
+            await this.installUpdate();
+            this.showToast('Update completed successfully!', 'success');
+        } catch (error) {
+            this.showToast('Update failed', 'error');
+        }
+    }
+
+    reloadApp() {
+        window.location.reload();
+    }
+
+    // === Service Worker Registration Enhancement ===
+    registerServiceWorker() {
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js').then(registration => {
+                console.log('Service Worker registered successfully');
+                
+                // Listen for updates
+                registration.addEventListener('updatefound', () => {
+                    const newWorker = registration.installing;
+                    if (newWorker) {
+                        newWorker.addEventListener('statechange', () => {
+                            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                console.log('New content is available');
+                                // Send message to service worker to check for updates
+                                if (newWorker.postMessage) {
+                                    newWorker.postMessage({ type: 'CHECK_FOR_UPDATES' });
+                                }
+                            }
+                        });
+                    }
+                });
+
+                // Set up message handling
+                navigator.serviceWorker.addEventListener('message', (event) => {
+                    this.handleServiceWorkerMessage(event.data);
+                });
+
+                // Start periodic update checks
+                setInterval(() => {
+                    if (navigator.onLine) {
+                        if (registration.active) {
+                            // Check for updates
+                            registration.active.postMessage({ type: 'CHECK_FOR_UPDATES' });
+                        }
+                    }
+                }, 30 * 60 * 1000); // Check every 30 minutes
+
+            }).catch(err => {
+                console.log('Service Worker registration failed:', err);
+                this.showToast('Service worker registration failed', 'error');
+            });
         }
     }
     
