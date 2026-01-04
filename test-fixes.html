@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Fixes - Currents News</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        .test-result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
+        .warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            background: #007bff;
+            color: white;
+        }
+        
+        button:hover {
+            background: #0056b3;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #dc3545;
+            margin-right: 5px;
+        }
+        
+        .status-indicator.active {
+            background: #28a745;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>🔧 Test Fixes for Currents News App</h1>
+
+    <div class="test-section">
+        <h2>📋 Test Overview</h2>
+        <p>Testing the fixes for:</p>
+        <ul>
+            <li>✅ Dark theme toggle functionality</li>
+            <li>✅ News loading system</li>
+            <li>✅ Service worker registration</li>
+            <li>✅ API key modal functionality</li>
+            <li>✅ Missing helper methods</li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h2>🔧 Theme Toggle Test</h2>
+        <p>Test the dark/light theme toggle functionality:</p>
+        <button onclick="testThemeToggle()">Test Theme Toggle</button>
+        <button onclick="testThemePersistence()">Test Theme Persistence</button>
+        <div id="theme-results"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>📰 News Loading Test</h2>
+        <p>Test the news loading functionality:</p>
+        <button onclick="testMockData()">Test Mock Data Loading</button>
+        <button onclick="testAPIKeyModal()">Test API Key Modal</button>
+        <div id="news-results"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>⚙️ Service Worker Test</h2>
+        <p>Test service worker functionality:</p>
+        <button onclick="testServiceWorker()">Test Service Worker</button>
+        <button onclick="testSWManager()">Test SW Manager</button>
+        <div id="sw-results"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>🎯 Overall App Test</h2>
+        <p>Test the complete application initialization:</p>
+        <button onclick="testAppInitialization()">Test App Initialization</button>
+        <div id="app-results"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>📊 Current Status</h2>
+        <div class="test-result info">
+            <strong>Theme Toggle:</strong> <span class="status-indicator" id="theme-status"></span> <span id="theme-status-text">Not tested</span>
+        </div>
+        <div class="test-result info">
+            <strong>News Loading:</strong> <span class="status-indicator" id="news-status"></span> <span id="news-status-text">Not tested</span>
+        </div>
+        <div class="test-result info">
+            <strong>Service Worker:</strong> <span class="status-indicator" id="sw-status"></span> <span id="sw-status-text">Not tested</span>
+        </div>
+        <div class="test-result info">
+            <strong>App Initialization:</strong> <span class="status-indicator" id="app-status"></span> <span id="app-status-text">Not tested</span>
+        </div>
+    </div>
+
+    <script>
+        // Test functions
+        function addResult(containerId, message, type = 'info') {
+            const container = document.getElementById(containerId);
+            const result = document.createElement('div');
+            result.className = `test-result ${type}`;
+            result.textContent = message;
+            container.appendChild(result);
+        }
+
+        function setStatus(id, isActive, text) {
+            const indicator = document.getElementById(id + '-status');
+            const textElement = document.getElementById(id + '-status-text');
+
+            if (indicator) {
+                indicator.className = `status-indicator ${isActive ? 'active' : ''}`;
+            }
+            if (textElement) {
+                textElement.textContent = text;
+            }
+        }
+
+        // Theme toggle tests
+        function testThemeToggle() {
+            addResult('theme-results', 'Testing theme toggle functionality...');
+
+            try {
+                // Check if theme toggle button exists
+                const themeToggle = document.querySelector('.theme-toggle');
+                if (!themeToggle) {
+                    addResult('theme-results', '❌ Theme toggle button not found', 'error');
+                    return;
+                }
+
+                addResult('theme-results', '✅ Theme toggle button found', 'success');
+
+                // Check if CurrentsNewsApp exists
+                if (typeof window.newsApp === 'undefined') {
+                    addResult('theme-results', '❌ CurrentsNewsApp not initialized', 'error');
+                    return;
+                }
+
+                addResult('theme-results', '✅ CurrentsNewsApp initialized', 'success');
+
+                // Test toggle method exists
+                if (typeof window.newsApp.toggleTheme !== 'function') {
+                    addResult('theme-results', '❌ toggleTheme method not found', 'error');
+                    return;
+                }
+
+                addResult('theme-results', '✅ toggleTheme method exists', 'success');
+
+                // Test theme toggle
+                const initialTheme = document.documentElement.getAttribute('data-theme');
+                window.newsApp.toggleTheme();
+
+                const newTheme = document.documentElement.getAttribute('data-theme');
+                if (newTheme !== initialTheme) {
+                    addResult('theme-results', `✅ Theme toggled successfully: ${initialTheme} → ${newTheme}`, 'success');
+                    setStatus('theme', true, 'Working');
+                } else {
+                    addResult('theme-results', '❌ Theme toggle did not change theme', 'error');
+                    setStatus('theme', false, 'Not working');
+                }
+
+            } catch (error) {
+                addResult('theme-results', `❌ Theme toggle test failed: ${error.message}`, 'error');
+                setStatus('theme', false, 'Error');
+            }
+        }
+
+        function testThemePersistence() {
+            addResult('theme-results', 'Testing theme persistence...');
+
+            try {
+                // Test localStorage
+                const savedTheme = localStorage.getItem('darkMode');
+                if (savedTheme === null) {
+                    addResult('theme-results', 'ℹ️ No saved theme found (first run)', 'info');
+                } else {
+                    addResult('theme-results', `✅ Saved theme found: ${savedTheme}`, 'success');
+                }
+
+                // Test current theme matches saved
+                const currentTheme = document.documentElement.getAttribute('data-theme');
+                const expectedTheme = savedTheme === 'true' ? 'dark' : 'light';
+
+                if (currentTheme === expectedTheme) {
+                    addResult('theme-results', '✅ Current theme matches saved preference', 'success');
+                } else {
+                    addResult('theme-results', `⚠️ Theme mismatch: expected ${expectedTheme}, got ${currentTheme}`, 'warning');
+                }
+
+            } catch (error) {
+                addResult('theme-results', `❌ Theme persistence test failed: ${error.message}`, 'error');
+            }
+        }
+
+        // News loading tests
+        function testMockData() {
+            addResult('news-results', 'Testing mock data functionality...');
+
+            try {
+                if (typeof window.newsApp === 'undefined') {
+                    addResult('news-results', '❌ CurrentsNewsApp not initialized', 'error');
+                    return;
+                }
+
+                // Test getMockData method
+                if (typeof window.newsApp.getMockData !== 'function') {
+                    addResult('news-results', '❌ getMockData method not found', 'error');
+                    return;
+                }
+
+                const mockData = window.newsApp.getMockData();
+
+                if (!Array.isArray(mockData)) {
+                    addResult('news-results', '❌ getMockData did not return an array', 'error');
+                    return;
+                }
+
+                if (mockData.length === 0) {
+                    addResult('news-results', '❌ getMockData returned empty array', 'error');
+                    return;
+                }
+
+                addResult('news-results', `✅ Mock data loaded successfully: ${mockData.length} articles`, 'success');
+
+                // Test article structure
+                const firstArticle = mockData[0];
+                const requiredFields = ['id', 'title', 'description', 'url', 'image', 'published', 'source', 'author', 'category'];
+                const missingFields = requiredFields.filter(field => !(field in firstArticle));
+
+                if (missingFields.length > 0) {
+                    addResult('news-results', `⚠️ Missing fields in mock data: ${missingFields.join(', ')}`, 'warning');
+                } else {
+                    addResult('news-results', '✅ Mock data has all required fields', 'success');
+                }
+
+                setStatus('news', true, 'Working');
+
+            } catch (error) {
+                addResult('news-results', `❌ Mock data test failed: ${error.message}`, 'error');
+                setStatus('news', false, 'Error');
+            }
+        }
+
+        function testAPIKeyModal() {
+            addResult('news-results', 'Testing API key modal functionality...');
+
+            try {
+                // Check if modal elements exist
+                const modal = document.getElementById('api-key-modal');
+                const saveBtn = document.getElementById('save-key-btn');
+                const tryDemoBtn = document.getElementById('try-demo-btn');
+
+                if (!modal) {
+                    addResult('news-results', '❌ API key modal not found', 'error');
+                    return;
+                }
+
+                if (!saveBtn || !tryDemoBtn) {
+                    addResult('news-results', '❌ Modal buttons not found', 'error');
+                    return;
+                }
+
+                addResult('news-results', '✅ API key modal elements found', 'success');
+
+                // Test try demo mode
+                if (typeof window.newsApp !== 'undefined' && typeof window.newsApp.useDemoMode === 'function') {
+                    addResult('news-results', '✅ useDemoMode method exists', 'success');
+                } else {
+                    addResult('news-results', '❌ useDemoMode method not found', 'error');
+                }
+
+            } catch (error) {
+                addResult('news-results', `❌ API key modal test failed: ${error.message}`, 'error');
+            }
+        }
+
+        // Service worker tests
+        function testServiceWorker() {
+            addResult('sw-results', 'Testing service worker functionality...');
+
+            try {
+                if (!('serviceWorker' in navigator)) {
+                    addResult('sw-results', '❌ Service Worker not supported in this browser', 'error');
+                    setStatus('sw', false, 'Not supported');
+                    return;
+                }
+
+                addResult('sw-results', '✅ Service Worker supported', 'success');
+
+                // Check if service worker is registered
+                navigator.serviceWorker.getRegistration().then(registration => {
+                    if (registration) {
+                        addResult('sw-results', `✅ Service Worker registered: ${registration.scope}`, 'success');
+                        setStatus('sw', true, 'Registered');
+                    } else {
+                        addResult('sw-results', '⚠️ No service worker registration found', 'warning');
+                        setStatus('sw', false, 'Not registered');
+                    }
+                }).catch(error => {
+                    addResult('sw-results', `❌ Service Worker registration check failed: ${error.message}`, 'error');
+                    setStatus('sw', false, 'Error');
+                });
+
+            } catch (error) {
+                addResult('sw-results', `❌ Service Worker test failed: ${error.message}`, 'error');
+                setStatus('sw', false, 'Error');
+            }
+        }
+
+        function testSWManager() {
+            addResult('sw-results', 'Testing service worker manager...');
+
+            try {
+                if (typeof window.serviceWorkerManager === 'undefined') {
+                    addResult('sw-results', '❌ ServiceWorkerManager not initialized', 'error');
+                    return;
+                }
+
+                addResult('sw-results', '✅ ServiceWorkerManager initialized', 'success');
+
+                // Test testServiceWorker method
+                if (typeof window.serviceWorkerManager.testServiceWorker === 'function') {
+                    addResult('sw-results', '✅ testServiceWorker method exists', 'success');
+
+                    // Run the test
+                    window.serviceWorkerManager.testServiceWorker().then(results => {
+                        results.forEach(result => {
+                            const type = result.includes('✅') ? 'success' :
+                                result.includes('❌') ? 'error' :
+                                result.includes('⚠️') ? 'warning' : 'info';
+                            addResult('sw-results', result, type);
+                        });
+                    }).catch(error => {
+                        addResult('sw-results', `❌ SW Manager test failed: ${error.message}`, 'error');
+                    });
+                } else {
+                    addResult('sw-results', '❌ testServiceWorker method not found', 'error');
+                }
+
+            } catch (error) {
+                addResult('sw-results', `❌ SW Manager test failed: ${error.message}`, 'error');
+            }
+        }
+
+        // App initialization test
+        function testAppInitialization() {
+            addResult('app-results', 'Testing application initialization...');
+
+            try {
+                if (typeof window.newsApp === 'undefined') {
+                    addResult('app-results', '❌ CurrentsNewsApp not initialized', 'error');
+                    setStatus('app', false, 'Not initialized');
+                    return;
+                }
+
+                addResult('app-results', '✅ CurrentsNewsApp initialized', 'success');
+
+                // Test required methods exist
+                const requiredMethods = [
+                    'toggleTheme', 'setTheme', 'fetchLatestNews', 'getMockData',
+                    'showLoading', 'hideLoading', 'showError', 'showToast',
+                    'showApiKeyModal', 'hideApiKeyModal', 'useDemoMode'
+                ];
+
+                const missingMethods = requiredMethods.filter(method =>
+                    typeof window.newsApp[method] !== 'function'
+                );
+
+                if (missingMethods.length > 0) {
+                    addResult('app-results', `❌ Missing methods: ${missingMethods.join(', ')}`, 'error');
+                    setStatus('app', false, 'Incomplete');
+                } else {
+                    addResult('app-results', '✅ All required methods present', 'success');
+                    setStatus('app', true, 'Complete');
+                }
+
+                // Test app state
+                const stateChecks = [{
+                    name: 'API Key',
+                    value: window.newsApp.apiKey
+                }, {
+                    name: 'Dark Mode',
+                    value: window.newsApp.isDarkMode
+                }, {
+                    name: 'Current Category',
+                    value: window.newsApp.currentCategory
+                }, {
+                    name: 'Articles',
+                    value: window.newsApp.articles.length
+                }];
+
+                stateChecks.forEach(check => {
+                    addResult('app-results', `ℹ️ ${check.name}: ${check.value}`, 'info');
+                });
+
+            } catch (error) {
+                addResult('app-results', `❌ App initialization test failed: ${error.message}`, 'error');
+                setStatus('app', false, 'Error');
+            }
+        }
+
+        // Auto-run some tests on load
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                addResult('theme-results', 'Auto-testing theme functionality...');
+                testThemeToggle();
+
+                setTimeout(() => {
+                    addResult('news-results', 'Auto-testing news functionality...');
+                    testMockData();
+
+                    setTimeout(() => {
+                        addResult('sw-results', 'Auto-testing service worker...');
+                        testServiceWorker();
+
+                        setTimeout(() => {
+                            addResult('app-results', 'Auto-testing app initialization...');
+                            testAppInitialization();
+                        }, 1000);
+                    }, 1000);
+                }, 1000);
+            }, 1000);
+        });
+    </script>
+</body>
+
+</html>

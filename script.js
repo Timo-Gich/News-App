@@ -1454,6 +1454,389 @@ class CurrentsNewsApp {
         if (diff < day) return Math.floor(diff / hour) + ' hours ago';
         return Math.floor(diff / day) + ' days ago';
     }
+
+    // ==================== THEME MANAGEMENT ====================
+    
+    // Toggle dark/light theme
+    toggleTheme() {
+        this.isDarkMode = !this.isDarkMode;
+        this.setTheme(this.isDarkMode);
+        localStorage.setItem('darkMode', this.isDarkMode.toString());
+        
+        // Update toggle button icon
+        const themeToggle = document.querySelector('.theme-toggle i');
+        if (themeToggle) {
+            themeToggle.className = this.isDarkMode ? 'fas fa-sun' : 'fas fa-moon';
+        }
+    }
+
+    // Set theme based on preference
+    setTheme(isDark) {
+        const root = document.documentElement;
+        root.setAttribute('data-theme', isDark ? 'dark' : 'light');
+        
+        // Update toggle button icon
+        const themeToggle = document.querySelector('.theme-toggle i');
+        if (themeToggle) {
+            themeToggle.className = isDark ? 'fas fa-sun' : 'fas fa-moon';
+        }
+    }
+
+    // ==================== NEWS LOADING METHODS ====================
+    
+    // Fetch latest news from API
+    async fetchLatestNews() {
+        try {
+            // If no API key, use demo mode
+            if (!this.apiKey || this.apiKey === 'demo_key_placeholder') {
+                return this.getMockData();
+            }
+
+            const url = `${this.baseUrl}/latest-news?language=${this.currentLanguage}&apiKey=${this.apiKey}`;
+            const response = await this.makeApiRequest(url);
+            
+            if (response.status === 'ok' && response.news) {
+                return response.news;
+            }
+            
+            throw new Error('No news data received');
+        } catch (error) {
+            console.error('Failed to fetch latest news:', error);
+            // Fallback to mock data
+            return this.getMockData();
+        }
+    }
+
+    // Get mock data for demo mode
+    getMockData() {
+        return [
+            {
+                id: 'mock-1',
+                title: 'Breaking: Technology Advances in AI Research',
+                description: 'Scientists have made significant breakthroughs in artificial intelligence, developing new algorithms that could revolutionize various industries.',
+                url: '#',
+                image: 'https://images.unsplash.com/photo-1485827404703-89b55fcc595e?w=400&h=200&fit=crop',
+                published: new Date().toISOString(),
+                source: 'Tech News Daily',
+                author: 'Jane Doe',
+                category: ['technology', 'science']
+            },
+            {
+                id: 'mock-2',
+                title: 'Global Markets React to Economic News',
+                description: 'Stock markets around the world showed mixed reactions as new economic data was released this morning.',
+                url: '#',
+                image: 'https://images.unsplash.com/photo-1516321318423-f06f119c6c6d?w=400&h=200&fit=crop',
+                published: new Date(Date.now() - 86400000).toISOString(),
+                source: 'Financial Times',
+                author: 'John Smith',
+                category: ['business', 'economy']
+            },
+            {
+                id: 'mock-3',
+                title: 'Sports: Championship Finals Announced',
+                description: 'The final matchups for this year\'s championship have been determined after intense qualifying rounds.',
+                url: '#',
+                image: 'https://images.unsplash.com/photo-1517649763962-0c623066013b?w=400&h=200&fit=crop',
+                published: new Date(Date.now() - 172800000).toISOString(),
+                source: 'Sports Network',
+                author: 'Mike Johnson',
+                category: ['sports']
+            }
+        ];
+    }
+
+    // Load category-specific news
+    async loadCategoryNews(category) {
+        try {
+            this.currentCategory = category;
+            this.currentPage = 1;
+            
+            // Show loading
+            this.showLoading();
+            
+            let articles;
+            
+            if (category === 'offline') {
+                articles = await this.getArticlesFromIndexedDB(50);
+            } else if (category === 'latest') {
+                articles = await this.fetchLatestNews();
+            } else {
+                // Fetch by category
+                const url = `${this.baseUrl}/search?language=${this.currentLanguage}&category=${category}&apiKey=${this.apiKey}`;
+                const response = await this.makeApiRequest(url);
+                articles = response.news || [];
+            }
+            
+            this.articles = articles;
+            this.totalPages = Math.ceil(this.articles.length / this.pageSize);
+            this.renderArticles();
+            this.updateStats();
+            this.hideLoading();
+            
+            // Update active category in navigation
+            this.setActiveCategory(category);
+            
+        } catch (error) {
+            this.hideLoading();
+            this.showError('Failed to load news for this category');
+            console.error('Category loading error:', error);
+        }
+    }
+
+    // ==================== UI MANAGEMENT METHODS ====================
+    
+    // Show loading spinner
+    showLoading() {
+        const loading = document.getElementById('loading');
+        if (loading) {
+            loading.style.display = 'flex';
+        }
+    }
+
+    // Hide loading spinner
+    hideLoading() {
+        const loading = document.getElementById('loading');
+        if (loading) {
+            loading.style.display = 'none';
+        }
+    }
+
+    // Show error message
+    showError(message) {
+        const errorContainer = document.getElementById('error-container');
+        const errorMessage = document.getElementById('error-message');
+        
+        if (errorContainer && errorMessage) {
+            errorMessage.textContent = message;
+            errorContainer.style.display = 'block';
+        }
+    }
+
+    // Show API key modal
+    showApiKeyModal() {
+        const modal = document.getElementById('api-key-modal');
+        if (modal) {
+            modal.classList.add('show');
+        }
+    }
+
+    // Hide API key modal
+    hideApiKeyModal() {
+        const modal = document.getElementById('api-key-modal');
+        if (modal) {
+            modal.classList.remove('show');
+        }
+    }
+
+    // Update statistics
+    updateStats() {
+        const articleCount = document.getElementById('article-count');
+        const lastUpdated = document.getElementById('last-updated');
+        const currentLanguage = document.getElementById('current-language');
+        
+        if (articleCount) {
+            articleCount.textContent = this.articles.length;
+        }
+        
+        if (lastUpdated) {
+            lastUpdated.textContent = 'Just now';
+        }
+        
+        if (currentLanguage) {
+            currentLanguage.textContent = this.getLanguageName(this.currentLanguage);
+        }
+    }
+
+    // Get language display name
+    getLanguageName(code) {
+        const languages = {
+            'en': 'English',
+            'es': 'Spanish',
+            'fr': 'French',
+            'de': 'German',
+            'it': 'Italian',
+            'pt': 'Portuguese'
+        };
+        return languages[code] || code;
+    }
+
+    // Set active category in navigation
+    setActiveCategory(category) {
+        document.querySelectorAll('.nav-link').forEach(link => {
+            if (link.dataset.category === category) {
+                link.classList.add('active');
+            } else {
+                link.classList.remove('active');
+            }
+        });
+    }
+
+    // Use demo mode
+    useDemoMode() {
+        this.apiKey = 'demo_key_placeholder';
+        localStorage.setItem('currents_api_key', this.apiKey);
+        this.hideApiKeyModal();
+        this.loadLatestNews();
+        this.showToast('Using demo mode - showing sample news articles', 'info');
+    }
+
+    // Save API key
+    saveApiKey() {
+        const input = document.getElementById('api-key-input');
+        const checkbox = document.getElementById('save-api-key');
+        
+        if (input && input.value.trim()) {
+            this.apiKey = input.value.trim();
+            
+            if (checkbox && checkbox.checked) {
+                localStorage.setItem('currents_api_key', this.apiKey);
+            }
+            
+            this.hideApiKeyModal();
+            this.loadLatestNews();
+            this.showToast('API key saved successfully!', 'success');
+        } else {
+            this.showToast('Please enter a valid API key', 'error');
+        }
+    }
+
+    // Reset API key
+    resetApiKey() {
+        localStorage.removeItem('currents_api_key');
+        this.apiKey = null;
+        this.showApiKeyModal();
+        this.showToast('API key removed. Please enter a new key.', 'info');
+    }
+
+    // Show toast notification
+    showToast(message, type = 'info') {
+        const container = document.getElementById('toast-container');
+        if (!container) return;
+
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        toast.innerHTML = `
+            <div class="toast-icon">
+                <i class="${this.getToastIcon(type)}"></i>
+            </div>
+            <div class="toast-message">${message}</div>
+            <button class="toast-close" onclick="this.parentElement.remove()">
+                <i class="fas fa-times"></i>
+            </button>
+        `;
+
+        container.appendChild(toast);
+
+        // Auto-remove after 3 seconds
+        setTimeout(() => {
+            if (toast.parentElement) {
+                toast.remove();
+            }
+        }, 3000);
+    }
+
+    // Get toast icon based on type
+    getToastIcon(type) {
+        switch (type) {
+            case 'success': return 'fas fa-check-circle';
+            case 'error': return 'fas fa-exclamation-circle';
+            case 'warning': return 'fas fa-exclamation-triangle';
+            case 'info': return 'fas fa-info-circle';
+            default: return 'fas fa-info-circle';
+        }
+    }
+
+    // Update pagination
+    updatePagination() {
+        const prevBtn = document.getElementById('prev-page');
+        const nextBtn = document.getElementById('next-page');
+        const currentPage = document.getElementById('current-page');
+        const totalPages = document.getElementById('total-pages');
+
+        if (prevBtn) {
+            prevBtn.disabled = this.currentPage <= 1;
+        }
+
+        if (nextBtn) {
+            nextBtn.disabled = this.currentPage >= this.totalPages;
+        }
+
+        if (currentPage) {
+            currentPage.textContent = this.currentPage;
+        }
+
+        if (totalPages) {
+            totalPages.textContent = this.totalPages;
+        }
+    }
+
+    // Load articles for current page
+    loadArticles() {
+        this.renderArticles();
+        this.updatePagination();
+    }
+
+    // Truncate text to specified length
+    truncateText(text, maxLength) {
+        if (!text) return '';
+        if (text.length <= maxLength) return text;
+        return text.substring(0, maxLength) + '...';
+    }
+
+    // Show article modal
+    hideArticleModal() {
+        const modal = document.getElementById('article-modal');
+        if (modal) {
+            modal.classList.remove('show');
+        }
+    }
+
+    // Share article
+    async shareArticle(article) {
+        if (navigator.share) {
+            try {
+                await navigator.share({
+                    title: article.title,
+                    text: article.description,
+                    url: article.url
+                });
+            } catch (error) {
+                console.log('Share failed:', error);
+            }
+        } else {
+            // Fallback: copy URL to clipboard
+            try {
+                await navigator.clipboard.writeText(article.url);
+                this.showToast('Article link copied to clipboard', 'success');
+            } catch (error) {
+                this.showToast('Could not copy link', 'error');
+            }
+        }
+    }
+
+    // Toggle bookmark
+    toggleBookmark(article) {
+        const index = this.bookmarks.findIndex(b => b.id === article.id);
+        
+        if (index > -1) {
+            this.bookmarks.splice(index, 1);
+            this.showToast('Removed from bookmarks', 'info');
+        } else {
+            this.bookmarks.push(article);
+            this.showToast('Added to bookmarks', 'success');
+        }
+        
+        localStorage.setItem('currents_bookmarks', JSON.stringify(this.bookmarks));
+        
+        // Update modal button
+        const bookmarkBtn = document.getElementById('modal-bookmark');
+        if (bookmarkBtn) {
+            bookmarkBtn.innerHTML = index > -1 ? 
+                '<i class="far fa-bookmark"></i> Bookmark' : 
+                '<i class="fas fa-bookmark"></i> Remove Bookmark';
+        }
+    }
 }
 
 // Initialize the application when DOM is loaded

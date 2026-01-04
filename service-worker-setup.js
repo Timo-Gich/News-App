@@ -1,5 +1,5 @@
-// Service Worker Setup and Management for Automatic Updates
-// This file handles proper service worker registration and refresh
+// Service Worker Management for Automatic Updates
+// This file handles service worker updates and notifications
 
 class ServiceWorkerManager {
     constructor() {
@@ -15,12 +15,15 @@ class ServiceWorkerManager {
         }
 
         try {
-            // Register service worker
-            this.registration = await navigator.serviceWorker.register('/sw.js', {
-                scope: '/'
-            });
+            // Get existing registration (no need to register again)
+            this.registration = await navigator.serviceWorker.getRegistration();
 
-            console.log('Service Worker registered:', this.registration.scope);
+            if (!this.registration) {
+                console.warn('No service worker registration found');
+                return false;
+            }
+
+            console.log('Service Worker found:', this.registration.scope);
 
             // Set up event listeners
             this.setupEventListeners();
@@ -30,7 +33,7 @@ class ServiceWorkerManager {
 
             return true;
         } catch (error) {
-            console.error('Service Worker registration failed:', error);
+            console.error('Service Worker management failed:', error);
             return false;
         }
     }
@@ -264,7 +267,7 @@ class ServiceWorkerManager {
                 return results;
             }
 
-            results.push(`✅ Service Worker registered: ${this.registration.scope}`);
+            results.push(`✅ Service Worker found: ${this.registration.scope}`);
 
             // Check controller
             this.controller = navigator.serviceWorker.controller;
