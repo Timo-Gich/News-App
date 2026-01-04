@@ -1,4 +1,4 @@
-// Currents News API Application - Enhanced with Offline Capabilities
+// Currents News API Application
 class CurrentsNewsApp {
     constructor() {
         this.apiKey = null;
@@ -21,21 +21,11 @@ class CurrentsNewsApp {
         this.isDarkMode = localStorage.getItem('darkMode') === 'true';
         this.deferredPrompt = null;
 
-        // === NEW: Offline capabilities state ===
-        this.offlineMode = false;
-        this.offlineArticles = [];
-        this.cacheInfo = {
-            totalArticles: 0,
-            lastSync: null,
-            cacheSize: '0 MB'
-        };
-        this.offlineActionsQueue = JSON.parse(localStorage.getItem('offlineActionsQueue') || '[]');
-
         // Initialize the app
         this.init();
     }
 
-    // ==================== ENHANCED INITIALIZATION ====================
+    // ==================== INITIALIZATION ====================
     init() {
         // Set up theme
         this.setTheme(this.isDarkMode);
@@ -58,62 +48,9 @@ class CurrentsNewsApp {
 
         // Register service worker
         this.registerServiceWorker();
-
-        // === NEW: Initialize offline capabilities ===
-        this.initOfflineCapabilities();
-
-        // Check initial online status
-        this.checkOnlineStatus();
     }
 
-    // === NEW: Initialize offline capabilities ===
-    initOfflineCapabilities() {
-        console.log('Initializing offline capabilities...');
-
-        // Check if IndexedDB is available
-        if (!window.indexedDB) {
-            console.warn('IndexedDB not supported - offline features limited');
-            this.showToast('Some offline features not available in this browser', 'warning');
-        }
-
-        // Load offline articles count
-        this.updateOfflineStats();
-
-        // Process any queued offline actions
-        this.processOfflineActionsQueue();
-
-        // Set up periodic cache updates when online
-        this.setupCacheUpdateInterval();
-    }
-
-    // === NEW: Update offline statistics ===
-    async updateOfflineStats() {
-        try {
-            // Get cache info from service worker
-            const cacheInfo = await this.getCacheInfo();
-            this.cacheInfo = cacheInfo;
-
-            // Update UI if elements exist
-            const offlineStats = document.getElementById('offline-stats');
-            if (offlineStats) {
-                offlineStats.innerHTML = `
-                    <i class="fas fa-download"></i>
-                    <span>${cacheInfo.totalArticles} articles offline</span>
-                `;
-            }
-
-            // Update last sync time
-            const lastSync = document.getElementById('last-sync');
-            if (lastSync && cacheInfo.lastSync) {
-                lastSync.textContent = this.formatRelativeTime(cacheInfo.lastSync);
-            }
-
-        } catch (error) {
-            console.log('Could not update offline stats:', error);
-        }
-    }
-
-    // ==================== ENHANCED EVENT LISTENERS ====================
+    // ==================== EVENT LISTENERS ====================
     setupEventListeners() {
         // Helper function to safely add event listeners
         const addListener = (selector, event, handler) => {
@@ -141,7 +78,6 @@ class CurrentsNewsApp {
             }
         };
 
-        // === EXISTING LISTENERS (unchanged) ===
         // Theme toggle
         addClassListener('.theme-toggle', 'click', () => {
             this.toggleTheme();
@@ -285,6 +221,7 @@ class CurrentsNewsApp {
         window.addEventListener('beforeinstallprompt', (e) => {
             this.deferredPrompt = e;
             this.showInstallButton();
+            // Remove e.preventDefault() unless you want to control WHEN to show it
         });
 
         // Listen for app installed event
@@ -295,65 +232,25 @@ class CurrentsNewsApp {
             this.deferredPrompt = null;
         });
 
-        // === NEW: Offline-specific event listeners ===
-
-        // Download for offline button (if exists)
-        addIdListener('download-offline', 'click', () => {
-            this.downloadCurrentArticlesForOffline();
-        });
-
-        // Clear cache button
-        addIdListener('clear-cache-btn', 'click', () => {
-            this.clearOfflineCache();
-        });
-
-        // View offline articles
-        addIdListener('view-offline-articles', 'click', () => {
-            this.showOfflineArticles();
-        });
-
-        // Save article for offline reading
-        addIdListener('save-for-offline', 'click', () => {
-            const modalTitle = document.getElementById('modal-title');
-            if (modalTitle) {
-                this.saveArticleForOffline({
-                    title: modalTitle.textContent,
-                    // We need to get current article data
-                });
-            }
-        });
-
-        // Service Worker messages
-        if (navigator.serviceWorker && navigator.serviceWorker.controller) {
-            navigator.serviceWorker.addEventListener('message', (event) => {
-                this.handleServiceWorkerMessage(event.data);
-            });
-        }
+        // Online/offline events
+        window.addEventListener('online', () => this.handleOnline());
+        window.addEventListener('offline', () => this.handleOffline());
     }
 
-    // ==================== ENHANCED API METHODS ====================
+    // ==================== API METHODS ====================
     async makeApiRequest(url) {
         if (!this.apiKey) {
             this.showApiKeyModal();
             throw new Error('API key required');
         }
 
-        // Check if offline - use enhanced offline handling
+        // Check if offline
         if (!navigator.onLine) {
-            console.log('Offline mode: Using enhanced offline capabilities');
-
-            // Try to get cached data first
-            const cachedData = await this.getEnhancedCachedNews();
+            console.log('Offline mode: using cached data');
+            const cachedData = await this.getCachedNews();
             if (cachedData.length > 0) {
                 return { status: 'ok', news: cachedData };
             }
-
-            // Try IndexedDB
-            const indexedDBData = await this.getArticlesFromIndexedDB();
-            if (indexedDBData.length > 0) {
-                return { status: 'ok', news: indexedDBData };
-            }
-
             throw new Error('You are offline and no cached data available');
         }
 
@@ -373,167 +270,85 @@ class CurrentsNewsApp {
             }
 
             const data = await response.json();
-
-            // === NEW: Cache the response for offline use ===
-            if (data.news && data.news.length > 0) {
-                this.cacheApiResponse(url, data.news);
-            }
-
             return data;
         } catch (error) {
             console.error('API request failed:', error);
 
-            // Enhanced fallback: try multiple sources
-            const cachedData = await this.getEnhancedCachedNews();
-            if (cachedData.length > 0) {
-                this.showToast('Using enhanced cached data', 'warning');
-                return { status: 'ok', news: cachedData };
+            // Try cached data as fallback
+            if (error.message !== 'You are offline and no cached data available') {
+                const cachedData = await this.getCachedNews();
+                if (cachedData.length > 0) {
+                    this.showToast('Using cached data', 'warning');
+                    return { status: 'ok', news: cachedData };
+                }
             }
 
             throw error;
         }
     }
 
-    // === NEW: Enhanced cache method ===
-    async cacheApiResponse(url, articles) {
+    async fetchLatestNews() {
+        this.showLoading();
+
         try {
-            // Store in service worker cache
-            if ('caches' in window) {
-                const cache = await caches.open('currents-news-v2.0');
-                const response = new Response(JSON.stringify({
-                    status: 'ok',
-                    news: articles,
-                    cachedAt: Date.now()
-                }), {
-                    headers: { 'Content-Type': 'application/json' }
-                });
+            const url = new URL(`${this.baseUrl}/latest-news`);
+            url.searchParams.append('language', this.currentLanguage);
+            url.searchParams.append('apiKey', this.apiKey);
 
-                await cache.put(url, response);
-                console.log('Enhanced cache: Stored API response');
+            const data = await this.makeApiRequest(url.toString());
+
+            if (data.status === 'ok' && data.news) {
+                return data.news;
+            } else {
+                throw new Error('Invalid response format from API');
             }
-
-            // Store in IndexedDB for offline search
-            await this.storeArticlesInIndexedDB(articles);
-
-            // Update offline stats
-            this.updateOfflineStats();
-
         } catch (error) {
-            console.log('Enhanced caching failed:', error);
+            console.error('Error fetching latest news:', error);
+            throw error;
         }
     }
 
-    // === NEW: Store articles in IndexedDB ===
-    async storeArticlesInIndexedDB(articles) {
-        if (!window.indexedDB) return;
+    async fetchHistoricalNews(keywords, filters = {}) {
+        this.showLoading();
 
-        return new Promise((resolve, reject) => {
-            const request = indexedDB.open('CurrentsOfflineDB', 1);
+        try {
+            const url = new URL(`${this.baseUrl}/search`);
+            url.searchParams.append('apiKey', this.apiKey);
+            url.searchParams.append('keywords', keywords);
+            url.searchParams.append('language', this.currentLanguage);
 
-            request.onsuccess = (event) => {
-                const db = event.target.result;
-                const tx = db.transaction('articles', 'readwrite');
-                const store = tx.objectStore('articles');
+            // Add filters if provided
+            if (filters.start_date) url.searchParams.append('start_date', filters.start_date);
+            if (filters.end_date) url.searchParams.append('end_date', filters.end_date);
+            if (filters.category) url.searchParams.append('category', filters.category);
+            if (filters.domain) url.searchParams.append('domain', filters.domain);
 
-                // Add metadata to each article
-                const articlesWithMeta = articles.map(article => ({
-                    ...article,
-                    id: article.id || article.url || `${Date.now()}-${Math.random()}`,
-                    timestamp: Date.now(),
-                    cachedAt: Date.now(),
-                    readStatus: 'unread',
-                    offlineAvailable: true
-                }));
+            const data = await this.makeApiRequest(url.toString());
 
-                // Store each article
-                articlesWithMeta.forEach(article => {
-                    store.put(article);
-                });
-
-                tx.oncomplete = () => {
-                    console.log(`Enhanced: Stored ${articles.length} articles in IndexedDB`);
-                    resolve();
-                };
-
-                tx.onerror = () => reject(tx.error);
-            };
-
-            request.onerror = () => reject(request.error);
-        });
+            if (data.status === 'ok' && data.news) {
+                return data.news;
+            } else {
+                throw new Error('Invalid response format from API');
+            }
+        } catch (error) {
+            console.error('Error fetching historical news:', error);
+            throw error;
+        }
     }
 
-    // === NEW: Get articles from IndexedDB ===
-    async getArticlesFromIndexedDB(limit = 50, category = null) {
-        if (!window.indexedDB) return [];
-
-        return new Promise((resolve, reject) => {
-            const request = indexedDB.open('CurrentsOfflineDB', 1);
-
-            request.onsuccess = (event) => {
-                const db = event.target.result;
-                const tx = db.transaction('articles', 'readonly');
-                const store = tx.objectStore('articles');
-
-                let getAllRequest;
-
-                if (category) {
-                    const index = store.index('category');
-                    getAllRequest = index.getAll(category);
-                } else {
-                    getAllRequest = store.getAll();
-                }
-
-                getAllRequest.onsuccess = () => {
-                    let articles = getAllRequest.result || [];
-
-                    // Sort by timestamp (newest first)
-                    articles.sort((a, b) => b.timestamp - a.timestamp);
-
-                    // Apply limit
-                    articles = articles.slice(0, limit);
-
-                    resolve(articles);
-                };
-
-                getAllRequest.onerror = () => reject(getAllRequest.error);
-            };
-
-            request.onerror = () => {
-                console.log('IndexedDB access error');
-                resolve([]);
-            };
-        });
-    }
-
-    // ==================== ENHANCED DATA LOADING ====================
+    // ==================== DATA LOADING ====================
     async loadLatestNews() {
         try {
-            // Show appropriate loading message
-            if (!navigator.onLine) {
-                this.showToast('Loading cached articles...', 'info');
-            }
-
             this.articles = await this.fetchLatestNews();
             this.currentPage = 1;
             this.totalPages = Math.ceil(this.articles.length / this.pageSize);
             this.renderArticles();
             this.hideLoading();
             this.updateStats();
-
-            const message = navigator.onLine ?
-                'Latest news loaded successfully!' :
-                `Loaded ${this.articles.length} cached articles`;
-            this.showToast(message, 'success');
-
+            this.showToast('Latest news loaded successfully!', 'success');
         } catch (error) {
             this.hideLoading();
-
-            // Enhanced error handling
-            if (error.message.includes('offline')) {
-                this.showOfflineMode();
-            } else {
-                this.showError(error.message);
-            }
+            this.showError(error.message);
 
             // Fallback to mock data if API fails
             if (error.message.includes('Invalid API key') || this.apiKey === 'demo_key_placeholder') {
@@ -542,7 +357,82 @@ class CurrentsNewsApp {
         }
     }
 
-    // ==================== ENHANCED UI RENDERING ====================
+    async loadCategoryNews(category) {
+        this.setActiveCategory(category);
+
+        if (category === 'latest') {
+            await this.loadLatestNews();
+            return;
+        }
+
+        try {
+            // For categories, we'll use search with category filter
+            this.articles = await this.fetchHistoricalNews('', { category });
+            this.currentPage = 1;
+            this.totalPages = Math.ceil(this.articles.length / this.pageSize);
+            this.renderArticles();
+            this.hideLoading();
+            this.updateStats();
+            this.showToast(`${category.charAt(0).toUpperCase() + category.slice(1)} news loaded!`, 'success');
+        } catch (error) {
+            this.hideLoading();
+            this.showError(error.message);
+        }
+    }
+
+    async performSearch() {
+        const searchInput = document.getElementById('search-input');
+        const query = searchInput ? searchInput.value.trim() : '';
+
+        if (!query) {
+            this.showToast('Please enter a search term', 'warning');
+            return;
+        }
+
+        this.searchQuery = query;
+
+        try {
+            this.articles = await this.fetchHistoricalNews(query, this.filters);
+            this.currentPage = 1;
+            this.totalPages = Math.ceil(this.articles.length / this.pageSize);
+            this.renderArticles();
+            this.hideLoading();
+            this.updateStats();
+            this.showToast(`Found ${this.articles.length} articles for "${query}"`, 'success');
+        } catch (error) {
+            this.hideLoading();
+            this.showError(error.message);
+        }
+    }
+
+    async performHistoricalSearch() {
+        const searchInput = document.getElementById('historical-search');
+        let query = '';
+
+        if (searchInput && searchInput.value) {
+            query = searchInput.value.trim();
+        }
+
+        if (!query) {
+            this.showToast('Please enter keywords for historical search', 'warning');
+            return;
+        }
+
+        try {
+            this.articles = await this.fetchHistoricalNews(query, this.filters);
+            this.currentPage = 1;
+            this.totalPages = Math.ceil(this.articles.length / this.pageSize);
+            this.renderArticles();
+            this.hideLoading();
+            this.updateStats();
+            this.showToast(`Found ${this.articles.length} historical articles for "${query}"`, 'success');
+        } catch (error) {
+            this.hideLoading();
+            this.showError(error.message);
+        }
+    }
+
+    // ==================== UI RENDERING ====================
     renderArticles() {
         const grid = document.getElementById('news-grid');
         if (!grid) return;
@@ -559,8 +449,7 @@ class CurrentsNewsApp {
                 <div class="no-articles" style="grid-column: 1 / -1; text-align: center; padding: 60px 20px;">
                     <i class="fas fa-inbox" style="font-size: 64px; color: var(--text-secondary); margin-bottom: 20px;"></i>
                     <h3>No articles found</h3>
-                    <p>${!navigator.onLine ? 'You are offline. Try connecting to the internet for latest news.' : 'Try a different search or category'}</p>
-                    ${!navigator.onLine ? '<button onclick="newsApp.showOfflineArticles()" class="btn btn-primary" style="margin-top: 20px;"><i class="fas fa-download"></i> View Cached Articles</button>' : ''}
+                    <p>Try a different search or category</p>
                 </div>
             `;
             return;
@@ -601,12 +490,6 @@ class CurrentsNewsApp {
                 article.category[0] :
                 'general';
 
-            // === NEW: Add offline indicator if article is cached ===
-            const isCached = article.offlineAvailable || article.cachedAt;
-            const offlineBadge = isCached ?
-                '<span class="offline-badge" title="Available offline"><i class="fas fa-download"></i></span>' :
-                '';
-
             // Check if image is available
             const hasImage = article.image && article.image !== "None";
 
@@ -616,7 +499,6 @@ class CurrentsNewsApp {
                     `<img src="${article.image}" alt="${article.title}" loading="lazy">` : 
                     `<div class="no-image"><i class="fas fa-newspaper"></i></div>`
                 }
-                ${offlineBadge}
             </div>
             <div class="news-content">
                 <h3 class="news-title">${this.truncateText(article.title, 100)}</h3>
@@ -632,7 +514,6 @@ class CurrentsNewsApp {
                     </div>
                     <span class="news-category">${category}</span>
                 </div>
-                ${isCached ? '<div class="cache-status"><i class="fas fa-check-circle"></i> Available offline</div>' : ''}
             </div>
         `;
         
@@ -704,17 +585,6 @@ class CurrentsNewsApp {
             bookmarkBtn.onclick = () => this.toggleBookmark(article);
         }
         
-        // === NEW: Add save for offline button ===
-        const saveForOfflineBtn = document.getElementById('save-for-offline');
-        if (saveForOfflineBtn) {
-            const isCached = article.offlineAvailable || article.cachedAt;
-            saveForOfflineBtn.innerHTML = isCached ? 
-                `<i class="fas fa-check"></i> Already Saved` : 
-                `<i class="fas fa-download"></i> Save for Offline`;
-            saveForOfflineBtn.disabled = isCached;
-            saveForOfflineBtn.onclick = () => this.saveArticleForOffline(article);
-        }
-        
         // Update share button
         const shareBtn = document.getElementById('modal-share');
         if (shareBtn) {
@@ -725,13 +595,408 @@ class CurrentsNewsApp {
         document.getElementById('article-modal')?.classList.add('show');
     }
 
-    // ==================== ENHANCED UTILITY METHODS ====================
-    
-    // === NEW: Enhanced offline detection ===
+    hideArticleModal() {
+        document.getElementById('article-modal')?.classList.remove('show');
+    }
+
+    // ==================== UTILITY METHODS ====================
+    truncateText(text, maxLength) {
+        if (!text) return '';
+        if (text.length <= maxLength) return text;
+        return text.substring(0, maxLength) + '...';
+    }
+
+    setActiveCategory(category) {
+        document.querySelectorAll('.nav-link').forEach(link => {
+            link.classList.remove('active');
+            if (link.dataset.category === category) {
+                link.classList.add('active');
+            }
+        });
+        this.currentCategory = category;
+    }
+
+    applyFilters() {
+        this.filters = {
+            start_date: document.getElementById('start-date')?.value || '',
+            end_date: document.getElementById('end-date')?.value || '',
+            category: document.getElementById('category-filter')?.value || '',
+            domain: document.getElementById('domain-filter')?.value.trim() || '',
+            keywords: document.getElementById('search-input')?.value.trim() || ''
+        };
+        
+        // If we have a search query, perform search with filters
+        if (this.filters.keywords) {
+            this.performSearch();
+        } else {
+            this.loadCategoryNews(this.currentCategory);
+        }
+        
+        this.showToast('Filters applied successfully!', 'success');
+    }
+
+    clearFilters() {
+        document.getElementById('start-date').value = '';
+        document.getElementById('end-date').value = '';
+        document.getElementById('category-filter').value = '';
+        document.getElementById('domain-filter').value = '';
+        
+        this.filters = {
+            start_date: '',
+            end_date: '',
+            category: '',
+            domain: '',
+            keywords: ''
+        };
+        
+        this.showToast('Filters cleared!', 'success');
+    }
+
+    updateDateFilters() {
+        const today = new Date().toISOString().split('T')[0];
+        const lastWeek = new Date();
+        lastWeek.setDate(lastWeek.getDate() - 7);
+        const lastWeekFormatted = lastWeek.toISOString().split('T')[0];
+        
+        const startDate = document.getElementById('start-date');
+        const endDate = document.getElementById('end-date');
+        
+        if (startDate) startDate.max = today;
+        if (endDate) {
+            endDate.max = today;
+            endDate.min = lastWeekFormatted;
+        }
+    }
+
+    updatePagination() {
+        document.getElementById('current-page').textContent = this.currentPage;
+        document.getElementById('total-pages').textContent = this.totalPages;
+        
+        const prevBtn = document.getElementById('prev-page');
+        const nextBtn = document.getElementById('next-page');
+        
+        if (prevBtn) prevBtn.disabled = this.currentPage === 1;
+        if (nextBtn) nextBtn.disabled = this.currentPage === this.totalPages || this.totalPages === 0;
+    }
+
+    updateStats() {
+        const articleCount = document.getElementById('article-count');
+        const lastUpdated = document.getElementById('last-updated');
+        const currentLanguage = document.getElementById('current-language');
+        
+        if (articleCount) articleCount.textContent = this.articles.length;
+        if (lastUpdated) lastUpdated.textContent = new Date().toLocaleTimeString([], { 
+            hour: '2-digit', 
+            minute: '2-digit' 
+        });
+        
+        const languageNames = {
+            'en': 'English',
+            'es': 'Spanish',
+            'fr': 'French',
+            'de': 'German',
+            'it': 'Italian',
+            'pt': 'Portuguese'
+        };
+        
+        if (currentLanguage) {
+            currentLanguage.textContent = languageNames[this.currentLanguage] || this.currentLanguage;
+        }
+    }
+
+    // ==================== UI STATE MANAGEMENT ====================
+    showLoading() {
+        const loading = document.getElementById('loading');
+        const errorContainer = document.getElementById('error-container');
+        const newsGrid = document.getElementById('news-grid');
+        const pagination = document.getElementById('pagination');
+        const statsBar = document.getElementById('stats-bar');
+        
+        if (loading) loading.style.display = 'block';
+        if (errorContainer) errorContainer.style.display = 'none';
+        if (newsGrid) newsGrid.style.display = 'none';
+        if (pagination) pagination.style.display = 'none';
+        if (statsBar) statsBar.style.display = 'none';
+    }
+
+    hideLoading() {
+        const loading = document.getElementById('loading');
+        const newsGrid = document.getElementById('news-grid');
+        const pagination = document.getElementById('pagination');
+        const statsBar = document.getElementById('stats-bar');
+        
+        if (loading) loading.style.display = 'none';
+        if (newsGrid) newsGrid.style.display = 'grid';
+        if (pagination) pagination.style.display = 'flex';
+        if (statsBar) statsBar.style.display = 'flex';
+    }
+
+    showError(message) {
+        const loading = document.getElementById('loading');
+        const errorContainer = document.getElementById('error-container');
+        const newsGrid = document.getElementById('news-grid');
+        const pagination = document.getElementById('pagination');
+        const statsBar = document.getElementById('stats-bar');
+        const errorMessage = document.getElementById('error-message');
+        
+        if (loading) loading.style.display = 'none';
+        if (errorContainer) errorContainer.style.display = 'block';
+        if (newsGrid) newsGrid.style.display = 'none';
+        if (pagination) pagination.style.display = 'none';
+        if (statsBar) statsBar.style.display = 'none';
+        if (errorMessage) errorMessage.textContent = message;
+    }
+
+    showToast(message, type = 'info') {
+        const container = document.getElementById('toast-container');
+        if (!container) return;
+        
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        
+        const icons = {
+            'success': 'fas fa-check-circle',
+            'error': 'fas fa-exclamation-circle',
+            'warning': 'fas fa-exclamation-triangle',
+            'info': 'fas fa-info-circle'
+        };
+        
+        toast.innerHTML = `
+            <div class="toast-icon">
+                <i class="${icons[type] || icons.info}"></i>
+            </div>
+            <div class="toast-message">${message}</div>
+            <button class="toast-close">
+                <i class="fas fa-times"></i>
+            </button>
+        `;
+        
+        container.appendChild(toast);
+        
+        // Remove toast after 5 seconds
+        setTimeout(() => {
+            toast.remove();
+        }, 5000);
+        
+        // Close button
+        toast.querySelector('.toast-close').addEventListener('click', () => {
+            toast.remove();
+        });
+    }
+
+    // ==================== THEME MANAGEMENT ====================
+    setTheme(isDark) {
+        this.isDarkMode = isDark;
+        document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
+        localStorage.setItem('darkMode', isDark);
+
+        const themeIcon = document.querySelector('.theme-toggle i');
+        if (themeIcon) {
+            themeIcon.className = isDark ? 'fas fa-sun' : 'fas fa-moon';
+        }
+    }
+
+    toggleTheme() {
+        this.setTheme(!this.isDarkMode);
+    }
+
+    // ==================== API KEY MANAGEMENT ====================
+    showApiKeyModal() {
+        document.getElementById('api-key-modal')?.classList.add('show');
+    }
+
+    hideApiKeyModal() {
+        document.getElementById('api-key-modal')?.classList.remove('show');
+    }
+
+    async saveApiKey() {
+        const keyInput = document.getElementById('api-key-input');
+        const saveCheckbox = document.getElementById('save-api-key');
+        
+        if (!keyInput || !keyInput.value.trim()) {
+            this.showToast('Please enter a valid API key', 'error');
+            return;
+        }
+
+        const key = keyInput.value.trim();
+        
+        // Test the API key first
+        try {
+            const testUrl = `${this.baseUrl}/latest-news?language=en&apiKey=${key}&limit=1`;
+            const response = await fetch(testUrl);
+            
+            if (response.status === 401) {
+                this.showToast('Invalid API key. Please check and try again.', 'error');
+                return;
+            }
+            
+            const data = await response.json();
+            if (data.status !== 'ok') {
+                this.showToast('Invalid API key. Please check and try again.', 'error');
+                return;
+            }
+            
+            this.apiKey = key;
+            
+            if (saveCheckbox?.checked) {
+                localStorage.setItem('currents_api_key', key);
+            }
+            
+            this.hideApiKeyModal();
+            this.showToast('API key saved successfully!', 'success');
+            this.loadLatestNews();
+            
+        } catch (error) {
+            this.showToast('Could not verify API key. Check your connection.', 'error');
+        }
+    }
+
+    resetApiKey() {
+        localStorage.removeItem('currents_api_key');
+        this.apiKey = null;
+        this.showApiKeyModal();
+        this.showToast('API key cleared. Please enter a new one.', 'info');
+    }
+
+    useDemoMode() {
+        this.showToast('Using demo mode with sample articles. Get a free API key for real news!', 'warning');
+        this.apiKey = 'demo_key_placeholder';
+        this.hideApiKeyModal();
+        this.useMockData();
+    }
+
+    // ==================== BOOKMARK FUNCTIONALITY ====================
+    toggleBookmark(article) {
+        const index = this.bookmarks.findIndex(b => b.id === article.id);
+        
+        if (index === -1) {
+            // Add bookmark
+            this.bookmarks.push(article);
+            this.showToast('Article bookmarked!', 'success');
+        } else {
+            // Remove bookmark
+            this.bookmarks.splice(index, 1);
+            this.showToast('Bookmark removed!', 'info');
+        }
+        
+        // Save to localStorage
+        localStorage.setItem('currents_bookmarks', JSON.stringify(this.bookmarks));
+        
+        // Update modal button
+        const bookmarkBtn = document.getElementById('modal-bookmark');
+        if (bookmarkBtn) {
+            const isBookmarked = index === -1;
+            bookmarkBtn.innerHTML = isBookmarked ? 
+                `<i class="fas fa-bookmark"></i> Remove Bookmark` : 
+                `<i class="far fa-bookmark"></i> Bookmark`;
+        }
+    }
+
+    // ==================== SHARE FUNCTIONALITY ====================
+    shareArticle(article) {
+        if (navigator.share) {
+            navigator.share({
+                title: article.title,
+                text: article.description,
+                url: article.url,
+            })
+            .then(() => this.showToast('Article shared successfully!', 'success'))
+            .catch(error => {
+                if (error.name !== 'AbortError') {
+                    this.showToast('Sharing failed: ' + error.message, 'error');
+                }
+            });
+        } else {
+            // Fallback: Copy to clipboard
+            navigator.clipboard.writeText(`${article.title} - ${article.url}`)
+                .then(() => this.showToast('Link copied to clipboard!', 'success'))
+                .catch(() => this.showToast('Failed to copy link', 'error'));
+        }
+    }
+
+    // ==================== OFFLINE & CACHING ====================
+    async getCachedNews() {
+        try {
+            if ('caches' in window) {
+                const cache = await caches.open('currents-news-v1.0');
+                const requests = await cache.keys();
+                
+                // Find latest cached news
+                const newsRequests = requests.filter(req => {
+                    const url = new URL(req.url);
+                    return url.hostname === 'api.currentsapi.services' &&
+                          (url.pathname.includes('/latest-news') || url.pathname.includes('/search'));
+                });
+                
+                if (newsRequests.length > 0) {
+                    const response = await cache.match(newsRequests[newsRequests.length - 1]);
+                    const data = await response.json();
+                    
+                    if (data.status === 'ok' && data.news) {
+                        this.showToast(`Showing ${data.news.length} cached articles`, 'info');
+                        return data.news;
+                    }
+                }
+            }
+            
+            // If no cache, return mock data
+            return this.getMockNews();
+        } catch (error) {
+            console.error('Error getting cached news:', error);
+            return this.getMockNews();
+        }
+    }
+
+    getMockNews() {
+        return [
+            {
+                id: 'offline-1',
+                title: 'Offline Mode Active',
+                description: 'You are currently offline. Previously viewed articles are shown here. Connect to the internet for latest news.',
+                url: '#',
+                author: 'Currents News',
+                image: 'https://images.unsplash.com/photo-1589652717521-10c0d092dea9?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80',
+                language: 'en',
+                category: ['general'],
+                published: new Date().toISOString()
+            }
+        ];
+    }
+
+    // ==================== SERVICE WORKER & PWA ====================
+    registerServiceWorker() {
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                navigator.serviceWorker.register('./sw.js')
+                    .then(registration => {
+                        console.log('Service Worker registered with scope:', registration.scope);
+                        
+                        // Check for updates
+                        registration.addEventListener('updatefound', () => {
+                            const newWorker = registration.installing;
+                            console.log('Service Worker update found!');
+                            
+                            newWorker.addEventListener('statechange', () => {
+                                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                    this.showToast('New version available! Refresh to update.', 'info');
+                                }
+                            });
+                        });
+                        
+                        // Check initial online status
+                        this.checkOnlineStatus();
+                        
+                    })
+                    .catch(error => {
+                        console.log('Service Worker registration failed:', error);
+                    });
+            });
+        }
+    }
+
     checkOnlineStatus() {
         const isOnline = navigator.onLine;
-        this.offlineMode = !isOnline;
-        
         let statusElement = document.getElementById('online-status');
         
         if (!statusElement) {
@@ -741,1101 +1006,133 @@ class CurrentsNewsApp {
         if (isOnline) {
             statusElement.className = 'online-status online';
             statusElement.innerHTML = '<i class="fas fa-wifi"></i> Online';
-            statusElement.title = 'Connected to the internet';
-            
-            // Remove offline banner if it exists
-            const offlineBanner = document.querySelector('.offline-banner');
-            if (offlineBanner) {
-                offlineBanner.remove();
-            }
-            
         } else {
             statusElement.className = 'online-status offline';
             statusElement.innerHTML = '<i class="fas fa-wifi-slash"></i> Offline';
-            statusElement.title = 'Working offline - cached articles available';
-            
-            // Show offline banner
-            this.showOfflineBanner();
-        }
-    }
-    
-    // === NEW: Show offline banner ===
-    showOfflineBanner() {
-        // Check if banner already exists
-        if (document.querySelector('.offline-banner')) return;
-        
-        const banner = document.createElement('div');
-        banner.className = 'offline-banner';
-        banner.innerHTML = `
-            <div class="container">
-                <i class="fas fa-wifi-slash"></i>
-                <span>You are offline. Reading cached articles.</span>
-                <button onclick="newsApp.showOfflineArticles()" class="btn btn-sm">
-                    View Offline Articles
-                </button>
-                <button onclick="this.parentElement.parentElement.remove()" class="btn-close">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-        `;
-        
-        // Add CSS for banner
-        if (!document.querySelector('#offline-banner-styles')) {
-            const style = document.createElement('style');
-            style.id = 'offline-banner-styles';
-            style.textContent = `
-                .offline-banner {
-                    background: linear-gradient(135deg, #f59e0b, #d97706);
-                    color: white;
-                    padding: 10px 0;
-                    position: sticky;
-                    top: var(--header-height);
-                    z-index: 999;
-                    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-                }
-                .offline-banner .container {
-                    display: flex;
-                    align-items: center;
-                    gap: 15px;
-                    justify-content: center;
-                    flex-wrap: wrap;
-                }
-                .offline-banner .btn-sm {
-                    background: rgba(255,255,255,0.2);
-                    border: 1px solid rgba(255,255,255,0.3);
-                    padding: 4px 12px;
-                    font-size: 12px;
-                }
-                .offline-banner .btn-close {
-                    background: none;
-                    border: none;
-                    color: white;
-                    cursor: pointer;
-                }
-                @media (max-width: 768px) {
-                    .offline-banner .container {
-                        font-size: 14px;
-                    }
-                }
-            `;
-            document.head.appendChild(style);
-        }
-        
-        document.body.prepend(banner);
-    }
-    
-    // === NEW: Enhanced cached news getter ===
-    async getEnhancedCachedNews() {
-        console.log('Getting enhanced cached news...');
-        
-        // Try multiple sources in order
-        const sources = [
-            this.getCachedNewsFromServiceWorker(),
-            this.getArticlesFromIndexedDB(30),
-            this.getCachedNews()
-        ];
-        
-        for (const source of sources) {
-            try {
-                const articles = await source;
-                if (articles && articles.length > 0) {
-                    console.log(`Found ${articles.length} articles from source`);
-                    return articles;
-                }
-            } catch (error) {
-                console.log('Source failed:', error);
-                continue;
-            }
-        }
-        
-        return [];
-    }
-    
-    // === NEW: Get cached news from Service Worker ===
-    async getCachedNewsFromServiceWorker() {
-        return new Promise((resolve, reject) => {
-            if (!navigator.serviceWorker?.controller) {
-                reject('No service worker');
-                return;
-            }
-            
-            const messageChannel = new MessageChannel();
-            
-            messageChannel.port1.onmessage = (event) => {
-                if (event.data.success) {
-                    resolve(event.data.articles || []);
-                } else {
-                    reject(event.data.error);
-                }
-            };
-            
-            navigator.serviceWorker.controller.postMessage({
-                type: 'GET_CACHED_ARTICLES',
-                limit: 50
-            }, [messageChannel.port2]);
-        });
-    }
-    
-    // === NEW: Get cache info ===
-    async getCacheInfo() {
-        return new Promise((resolve, reject) => {
-            if (!navigator.serviceWorker?.controller) {
-                resolve({ totalArticles: 0, lastSync: null, cacheSize: '0 MB' });
-                return;
-            }
-            
-            const messageChannel = new MessageChannel();
-            
-            messageChannel.port1.onmessage = (event) => {
-                if (event.data.success) {
-                    resolve({
-                        totalArticles: event.data.itemCount || 0,
-                        lastSync: Date.now(),
-                        cacheSize: this.formatBytes(event.data.itemCount * 50000) // Estimate 50KB per article
-                    });
-                } else {
-                    resolve({ totalArticles: 0, lastSync: null, cacheSize: '0 MB' });
-                }
-            };
-            
-            navigator.serviceWorker.controller.postMessage({
-                type: 'GET_CACHE_INFO'
-            }, [messageChannel.port2]);
-        });
-    }
-
-    // ==================== NEW OFFLINE-SPECIFIC METHODS ====================
-    
-    // === Save article for offline reading ===
-    async saveArticleForOffline(article) {
-        try {
-            await this.storeArticlesInIndexedDB([article]);
-            this.showToast('Article saved for offline reading!', 'success');
-            this.updateOfflineStats();
-            
-            // Update UI
-            const saveBtn = document.getElementById('save-for-offline');
-            if (saveBtn) {
-                saveBtn.innerHTML = '<i class="fas fa-check"></i> Saved';
-                saveBtn.disabled = true;
-            }
-            
-        } catch (error) {
-            this.showToast('Failed to save article for offline', 'error');
-            console.error('Save for offline failed:', error);
-        }
-    }
-    
-    // === Download current articles for offline ===
-    async downloadCurrentArticlesForOffline() {
-        if (this.articles.length === 0) {
-            this.showToast('No articles to save', 'warning');
-            return;
-        }
-        
-        this.showToast(`Saving ${this.articles.length} articles for offline...`, 'info');
-        
-        try {
-            await this.storeArticlesInIndexedDB(this.articles);
-            this.showToast(`Saved ${this.articles.length} articles for offline reading!`, 'success');
-            this.updateOfflineStats();
-        } catch (error) {
-            this.showToast('Failed to save articles for offline', 'error');
-        }
-    }
-    
-    // === Show offline articles view ===
-    async showOfflineArticles() {
-        this.showLoading();
-        
-        try {
-            const offlineArticles = await this.getArticlesFromIndexedDB(100);
-            this.articles = offlineArticles;
-            this.currentPage = 1;
-            this.totalPages = Math.ceil(this.articles.length / this.pageSize);
-            
-            this.renderArticles();
-            this.hideLoading();
-            this.updateStats();
-            
-            // Update header to show offline mode
-            this.setActiveCategory('offline');
-            
-            this.showToast(`Showing ${offlineArticles.length} offline articles`, 'success');
-            
-        } catch (error) {
-            this.hideLoading();
-            this.showError('No offline articles found');
-        }
-    }
-    
-    // === Show offline mode UI ===
-    showOfflineMode() {
-        const grid = document.getElementById('news-grid');
-        if (!grid) return;
-        
-        grid.innerHTML = `
-            <div class="offline-mode" style="grid-column: 1 / -1; text-align: center; padding: 60px 20px;">
-                <div class="offline-icon" style="font-size: 64px; color: var(--warning-color); margin-bottom: 20px;">
-                    <i class="fas fa-wifi-slash"></i>
-                </div>
-                <h3>You are Offline</h3>
-                <p style="color: var(--text-secondary); margin-bottom: 30px; max-width: 500px; margin-left: auto; margin-right: auto;">
-                    You are currently offline. You can read previously cached articles or save new ones for offline reading.
-                </p>
-                <div style="display: flex; gap: 15px; justify-content: center; flex-wrap: wrap;">
-                    <button onclick="newsApp.showOfflineArticles()" class="btn btn-primary">
-                        <i class="fas fa-newspaper"></i> View Cached Articles
-                    </button>
-                    <button onclick="location.reload()" class="btn btn-secondary">
-                        <i class="fas fa-redo"></i> Retry Connection
-                    </button>
-                </div>
-                <div style="margin-top: 30px; padding: 20px; background: var(--bg-secondary); border-radius: var(--border-radius-sm); max-width: 400px; margin-left: auto; margin-right: auto;">
-                    <h4><i class="fas fa-info-circle"></i> Offline Tips</h4>
-                    <ul style="text-align: left; margin-top: 10px; padding-left: 20px; color: var(--text-secondary);">
-                        <li>Save articles for offline by clicking the download icon</li>
-                        <li>Bookmarked articles are automatically saved</li>
-                        <li>Connect to WiFi to download multiple articles at once</li>
-                    </ul>
-                </div>
-            </div>
-        `;
-        
-        this.hideLoading();
-    }
-    
-    // === Clear offline cache ===
-    async clearOfflineCache() {
-        if (!confirm('Clear all offline articles? This cannot be undone.')) return;
-        
-        try {
-            // Clear IndexedDB
-            if (window.indexedDB) {
-                const request = indexedDB.deleteDatabase('CurrentsOfflineDB');
-                request.onsuccess = () => {
-                    console.log('IndexedDB cleared');
-                };
-            }
-            
-            // Clear service worker cache
-            if ('caches' in window) {
-                await caches.delete('currents-news-v2.0');
-            }
-            
-            // Clear local storage bookmarks
-            localStorage.removeItem('offlineActionsQueue');
-            
-            this.showToast('Offline cache cleared successfully', 'success');
-            this.updateOfflineStats();
-            
-            // Reload if in offline mode
-            if (this.offlineMode) {
-                this.showOfflineMode();
-            }
-            
-        } catch (error) {
-            this.showToast('Failed to clear cache', 'error');
-        }
-    }
-    
-    // === Process offline actions queue ===
-    async processOfflineActionsQueue() {
-        if (this.offlineActionsQueue.length === 0 || !navigator.onLine) return;
-        
-        this.showToast('Processing offline actions...', 'info');
-        
-        // Process each action
-        for (const action of this.offlineActionsQueue) {
-            try {
-                switch (action.type) {
-                    case 'bookmark':
-                        await this.syncBookmark(action.data);
-                        break;
-                    case 'read':
-                        await this.syncReadingProgress(action.data);
-                        break;
-                }
-            } catch (error) {
-                console.log('Failed to process offline action:', error);
-            }
-        }
-        
-        // Clear processed actions
-        this.offlineActionsQueue = [];
-        localStorage.setItem('offlineActionsQueue', JSON.stringify(this.offlineActionsQueue));
-        
-        this.showToast('Offline actions synced successfully', 'success');
-    }
-    
-    // === Sync bookmark (stub - implement based on your backend) ===
-    async syncBookmark(article) {
-        // Implement actual sync with your backend
-        console.log('Syncing bookmark:', article);
-    }
-    
-    // === Sync reading progress (stub) ===
-    async syncReadingProgress(progress) {
-        // Implement actual sync with your backend
-        console.log('Syncing reading progress:', progress);
-    }
-    
-    // === Handle service worker messages ===
-    handleServiceWorkerMessage(data) {
-        switch (data.type) {
-            case 'SW_UPDATED':
-                this.showToast(`App updated to version ${data.version}!`, 'success');
-                break;
-            case 'UPDATE_AVAILABLE':
-                this.showUpdateAvailableNotification(data);
-                break;
-            case 'UPDATE_INSTALLED':
-                this.showToast('Update installed successfully', 'success');
-                this.reloadApp();
-                break;
-                case 'UPDATE_CHECK_FAILED':
-                this.showToast('Update check failed', 'warning');
-                break;
-            case 'SYNC_COMPLETE':
-                this.updateOfflineStats();
-                break;
+            this.showToast('You are offline. Reading cached articles.', 'warning');
         }
     }
 
-    // === NEW: Update notification system ===
-    showUpdateNotification() {
-        const notificationContainer = document.createElement('div');
-        notificationContainer.className = 'update-notification';
-        notificationContainer.innerHTML = `
-            <div class="update-toast">
-                <i class="fas fa-download"></i>
-                <div class="update-content">
-                    <div class="update-title">New Version Available</div>
-                    <div class="update-message">A new version of Currents News is available. Your changes will be saved.</div>
-                    <div class="update-actions">
-                        <button class="btn btn-sm btn-primary update-btn">Update Now</button>
-                        <button class="btn btn-sm btn-secondary">Remind Me Later</button>
-                    </div>
-                </div>
-            </div>
-        `;
+    createOnlineStatusIndicator() {
+        const statusElement = document.createElement('div');
+        statusElement.id = 'online-status';
+        statusElement.className = 'online-status';
+        const headerControls = document.querySelector('.header-controls');
+        if (headerControls) {
+            headerControls.prepend(statusElement);
+        }
+        return statusElement;
+    }
+
+    handleOnline() {
+        this.checkOnlineStatus();
+        this.showToast('Back online! Syncing latest news...', 'success');
         
-        // Add to body
-        document.body.appendChild(notificationContainer);
-        
-        // Add CSS
-        this.addUpdateNotificationStyles();
-        
-        // Set up event listeners
-        this.setupUpdateNotificationListeners(notificationContainer);
-        
-        // Auto-hide after 10 seconds
+        // Try to refresh data when back online
         setTimeout(() => {
-            this.hideUpdateNotification(notificationContainer);
-        }, 10000);
+            if (this.currentCategory === 'latest') {
+                this.loadLatestNews();
+            } else {
+                this.loadCategoryNews(this.currentCategory);
+            }
+        }, 1000);
     }
 
-    showUpdateAvailableNotification(data) {
-        console.log('Update available:', data);
-        
-        // Only show update notification if not already shown
-        if (!document.querySelector('.update-notification')) {
-            this.showUpdateNotification();
+    handleOffline() {
+        this.checkOnlineStatus();
+        this.showToast('You are offline. Using cached articles.', 'warning');
+    }
+
+    showInstallButton() {
+        const installBtn = document.getElementById('install-btn');
+        if (installBtn) {
+            installBtn.style.display = 'flex';
         }
     }
 
-    addUpdateNotificationStyles() {
-        if (document.getElementById('update-notification-styles')) return;
-        
-        const style = document.createElement('style');
-        style.id = 'update-notification-styles';
-        style.textContent = `
-            .update-notification {
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                z-index: 9999;
-                animation: slideInDown 0.3s ease-out;
-            }
-            
-            .update-toast {
-                background: linear-gradient(135deg, #10b98d, #059666);
-                color: white;
-                border-radius: 12px;
-                padding: 15px 20px;
-                display: flex;
-                align-items: center;
-                box-shadow: 0 8px 25px rgba(16, 185, 221, 0.3);
-                max-width: 400px;
-                animation: slideInRight 0.3s ease-out;
-                animation-fill-mode: both;
-                opacity: 0;
-                animation-delay: 0.1s;
-            }
-            
-            .update-content {
-                flex: 1;
-                margin-left: 15px;
-            }
-            
-            .update-title {
-                font-weight: 600;
-                font-size: 16px;
-                margin: 0 0 4px 0;
-            }
-            
-            .update-message {
-                font-size: 14px;
-                opacity: 0.9;
-                margin: 0 0 10px 0;
-            }
-            
-            .update-actions {
-                display: flex;
-                gap: 10px;
-            }
-            
-            .update-btn {
-                padding: 6px 12px;
-                font-size: 12px;
-                font-weight: 500;
-                border-radius: 6px;
-                border: none;
-                cursor: pointer;
-                transition: all 0.2s ease;
-            }
-            
-            .update-btn:hover {
-                transform: translateY(-1px);
-                box-shadow: 0 4px 12px rgba(16, 154, 255, 0.3);
-            }
-            
-            .update-btn:active {
-                transform: translateY(0);
-            }
-            
-            @keyframes slideInDown {
-                from {
-                    opacity: 0;
-                    transform: translateY(-20px);
-                }
-                to {
-                    opacity: 1;
-                    transform: translateY(0);
-                }
-            }
-            
-            @keyframes slideInRight {
-                from {
-                    opacity: 0;
-                    transform: translateX(20px);
-                }
-                to {
-                    opacity: 1;
-                    transform: translateX(0);
-                    display: block;
-                }
-            }
-            
-            @media (max-width: 768px) {
-                .update-notification {
-                    left: 20px;
-                    right: 20px;
-                }
-                
-                .update-toast {
-                    flex-direction: column;
-                    align-items: stretch;
-                    padding: 15px;
-                }
-                
-                .update-actions {
-                    justify-content: space-between;
-                    margin-top: 10px;
-                }
-            }
-        `;
-        
-        document.head.appendChild(style);
-    }
-
-    setupUpdateNotificationStyles() {
-        // Add the styles
-        this.addUpdateNotificationStyles();
-    }
-
-    setupUpdateNotificationListeners(container) {
-        const updateBtn = container.querySelector('.update-btn');
-        const laterBtn = container.querySelector('.update-btn:last-child');
-        
-        // Update now
-        updateBtn.addEventListener('click', async () => {
-            try {
-                await this.installUpdate();
-                this.hideUpdateNotification(container);
-            } catch (error) {
-                this.showToast('Failed to install update', 'error');
-            }
-        });
-        
-        // Remind later
-        laterBtn.addEventListener('click', () => {
-            this.hideUpdateNotification(container);
-        });
-        
-        // Close on click outside
-        container.addEventListener('click', (e) => {
-            if (e.target === container) {
-                this.hideUpdateNotification(container);
-            }
-        });
-    }
-
-    hideUpdateNotification(container) {
-        if (container) {
-            container.style.animation = 'slideOutRight 0.3s ease-in';
-            container.addEventListener('animationend', () => {
-                if (container.parentElement) {
-                    container.remove();
-                }
-            });
+    hideInstallButton() {
+        const installBtn = document.getElementById('install-btn');
+        if (installBtn) {
+            installBtn.style.display = 'none';
         }
     }
 
-    // === Update management methods ===
-    async checkForUpdates() {
-        try {
-            const response = await fetch('/sw.js?' + Date.now());
-            const swCode = await response.text();
+    async installPWA() {
+        if (this.deferredPrompt) {
+            this.deferredPrompt.prompt();
+            const { outcome } = await this.deferredPrompt.userChoice;
             
-            // Simple version check
-            const versionMatch = swCode.match(/VERSION = ['"]([^'"]+)['"]/);
-            const currentVersion = versionMatch ? versionMatch[1] : 'unknown';
-            
-            if (currentVersion !== this.currentVersion) {
-                this.showUpdateAvailable();
-                this.newVersionAvailable = true;
-            }
-        } catch (error) {
-            console.log('Update check failed:', error);
-        }
-    }
-
-    async installUpdate() {
-        try {
-            if ('serviceWorker' in navigator) {
-                const registration = await navigator.serviceWorker.ready;
-                
-                if (registration.waiting) {
-                    // Show loading state
-                    this.showUpdateProgress();
-                    
-                    // Install update
-                    registration.waiting.postMessage({ type: 'SKIP_WAITING' });
-                    
-                    // Wait for the new service worker to activate
-                    const activationPromise = new Promise((resolve) => {
-                        registration.waiting.addEventListener('statechange', (event) => {
-                            if (registration.waiting.state === 'activated') {
-                                resolve();
-                            }
-                        });
-                    });
-                    
-                    await activationPromise;
-                    
-                    // Reload the page to complete the update
-                    window.location.reload();
-                }
-            }
-        } catch (error) {
-            console.error('Update installation failed:', error);
-            throw error;
-        }
-    }
-
-    showUpdateProgress() {
-        this.showToast('Installing update...', 'info');
-    }
-
-    async performUpdate() {
-        try {
-            await this.installUpdate();
-            this.showToast('Update completed successfully!', 'success');
-        } catch (error) {
-            this.showToast('Update failed', 'error');
-        }
-    }
-
-    reloadApp() {
-        window.location.reload();
-    }
-
-    // === Service Worker Registration Enhancement ===
-    registerServiceWorker() {
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/sw.js').then(registration => {
-                console.log('Service Worker registered successfully');
-                
-                // Listen for updates
-                registration.addEventListener('updatefound', () => {
-                    const newWorker = registration.installing;
-                    if (newWorker) {
-                        newWorker.addEventListener('statechange', () => {
-                            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                                console.log('New content is available');
-                                // Send message to service worker to check for updates
-                                if (newWorker.postMessage) {
-                                    newWorker.postMessage({ type: 'CHECK_FOR_UPDATES' });
-                                }
-                            }
-                        });
-                    }
-                });
-
-                // Set up message handling
-                navigator.serviceWorker.addEventListener('message', (event) => {
-                    this.handleServiceWorkerMessage(event.data);
-                });
-
-                // Start periodic update checks
-                setInterval(() => {
-                    if (navigator.onLine) {
-                        if (registration.active) {
-                            // Check for updates
-                            registration.active.postMessage({ type: 'CHECK_FOR_UPDATES' });
-                        }
-                    }
-                }, 30 * 60 * 1000); // Check every 30 minutes
-
-            }).catch(err => {
-                console.log('Service Worker registration failed:', err);
-                this.showToast('Service worker registration failed', 'error');
-            });
-        }
-    }
-    
-    // === Setup cache update interval ===
-    setupCacheUpdateInterval() {
-        // Update cache stats every 5 minutes when online
-        setInterval(() => {
-            if (navigator.onLine) {
-                this.updateOfflineStats();
-            }
-        }, 5 * 60 * 1000);
-    }
-
-    // ==================== HELPER METHODS ====================
-    
-    // === Format bytes to human readable ===
-    formatBytes(bytes, decimals = 2) {
-        if (bytes === 0) return '0 Bytes';
-        
-        const k = 1024;
-        const dm = decimals < 0 ? 0 : decimals;
-        const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-        
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
-    }
-    
-    // === Format relative time ===
-    formatRelativeTime(timestamp) {
-        const now = Date.now();
-        const diff = now - timestamp;
-        
-        const minute = 60 * 1000;
-        const hour = minute * 60;
-        const day = hour * 24;
-        
-        if (diff < minute) return 'just now';
-        if (diff < hour) return Math.floor(diff / minute) + ' minutes ago';
-        if (diff < day) return Math.floor(diff / hour) + ' hours ago';
-        return Math.floor(diff / day) + ' days ago';
-    }
-
-    // ==================== THEME MANAGEMENT ====================
-    
-    // Toggle dark/light theme
-    toggleTheme() {
-        this.isDarkMode = !this.isDarkMode;
-        this.setTheme(this.isDarkMode);
-        localStorage.setItem('darkMode', this.isDarkMode.toString());
-        
-        // Update toggle button icon
-        const themeToggle = document.querySelector('.theme-toggle i');
-        if (themeToggle) {
-            themeToggle.className = this.isDarkMode ? 'fas fa-sun' : 'fas fa-moon';
-        }
-    }
-
-    // Set theme based on preference
-    setTheme(isDark) {
-        const root = document.documentElement;
-        root.setAttribute('data-theme', isDark ? 'dark' : 'light');
-        
-        // Update toggle button icon
-        const themeToggle = document.querySelector('.theme-toggle i');
-        if (themeToggle) {
-            themeToggle.className = isDark ? 'fas fa-sun' : 'fas fa-moon';
-        }
-    }
-
-    // ==================== NEWS LOADING METHODS ====================
-    
-    // Fetch latest news from API
-    async fetchLatestNews() {
-        try {
-            // If no API key, use demo mode
-            if (!this.apiKey || this.apiKey === 'demo_key_placeholder') {
-                return this.getMockData();
-            }
-
-            const url = `${this.baseUrl}/latest-news?language=${this.currentLanguage}&apiKey=${this.apiKey}`;
-            const response = await this.makeApiRequest(url);
-            
-            if (response.status === 'ok' && response.news) {
-                return response.news;
+            if (outcome === 'accepted') {
+                console.log('User accepted the install prompt');
+                this.showToast('Installing app...', 'success');
+            } else {
+                console.log('User dismissed the install prompt');
             }
             
-            throw new Error('No news data received');
-        } catch (error) {
-            console.error('Failed to fetch latest news:', error);
-            // Fallback to mock data
-            return this.getMockData();
+            this.deferredPrompt = null;
+            this.hideInstallButton();
         }
     }
 
-    // Get mock data for demo mode
-    getMockData() {
-        return [
+    checkStandaloneMode() {
+        if (window.matchMedia('(display-mode: standalone)').matches || 
+            window.navigator.standalone === true) {
+            console.log('Running in PWA mode');
+            // You can add PWA-specific features here
+        }
+    }
+
+    // ==================== MOCK DATA ====================
+    useMockData() {
+        this.showToast('Using demo data. Get an API key for real news!', 'warning');
+        
+        const mockArticles = [
             {
                 id: 'mock-1',
-                title: 'Breaking: Technology Advances in AI Research',
-                description: 'Scientists have made significant breakthroughs in artificial intelligence, developing new algorithms that could revolutionize various industries.',
-                url: '#',
-                image: 'https://images.unsplash.com/photo-1485827404703-89b55fcc595e?w=400&h=200&fit=crop',
-                published: new Date().toISOString(),
-                source: 'Tech News Daily',
-                author: 'Jane Doe',
-                category: ['technology', 'science']
+                title: 'Global Climate Summit Reaches Historic Agreement',
+                description: 'World leaders have reached a historic agreement at the Global Climate Summit, committing to significant reductions in carbon emissions by 2030.',
+                url: 'https://example.com/climate-summit',
+                author: 'Global News Team',
+                image: 'https://images.unsplash.com/photo-1589652717521-10c0d092dea9?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80',
+                language: 'en',
+                category: ['world', 'environment'],
+                published: new Date().toISOString()
             },
             {
                 id: 'mock-2',
-                title: 'Global Markets React to Economic News',
-                description: 'Stock markets around the world showed mixed reactions as new economic data was released this morning.',
-                url: '#',
-                image: 'https://images.unsplash.com/photo-1516321318423-f06f119c6c6d?w=400&h=200&fit=crop',
-                published: new Date(Date.now() - 86400000).toISOString(),
-                source: 'Financial Times',
-                author: 'John Smith',
-                category: ['business', 'economy']
+                title: 'Tech Giants Announce Breakthrough in Quantum Computing',
+                description: 'Major technology companies have jointly announced a breakthrough in quantum computing that could revolutionize data processing.',
+                url: 'https://example.com/quantum-computing',
+                author: 'Tech Reporter',
+                image: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80',
+                language: 'en',
+                category: ['technology', 'science'],
+                published: new Date(Date.now() - 86400000).toISOString()
             },
             {
                 id: 'mock-3',
-                title: 'Sports: Championship Finals Announced',
-                description: 'The final matchups for this year\'s championship have been determined after intense qualifying rounds.',
-                url: '#',
-                image: 'https://images.unsplash.com/photo-1517649763962-0c623066013b?w=400&h=200&fit=crop',
-                published: new Date(Date.now() - 172800000).toISOString(),
-                source: 'Sports Network',
-                author: 'Mike Johnson',
-                category: ['sports']
+                title: 'Stock Markets Reach All-Time High Amid Economic Recovery',
+                description: 'Global stock markets have reached record highs as economic indicators show strong recovery from recent challenges.',
+                url: 'https://example.com/stock-markets',
+                author: 'Financial Times',
+                image: 'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80',
+                language: 'en',
+                category: ['business', 'finance'],
+                published: new Date(Date.now() - 172800000).toISOString()
             }
         ];
-    }
-
-    // Load category-specific news
-    async loadCategoryNews(category) {
-        try {
-            this.currentCategory = category;
-            this.currentPage = 1;
-            
-            // Show loading
-            this.showLoading();
-            
-            let articles;
-            
-            if (category === 'offline') {
-                articles = await this.getArticlesFromIndexedDB(50);
-            } else if (category === 'latest') {
-                articles = await this.fetchLatestNews();
-            } else {
-                // Fetch by category
-                const url = `${this.baseUrl}/search?language=${this.currentLanguage}&category=${category}&apiKey=${this.apiKey}`;
-                const response = await this.makeApiRequest(url);
-                articles = response.news || [];
-            }
-            
-            this.articles = articles;
-            this.totalPages = Math.ceil(this.articles.length / this.pageSize);
-            this.renderArticles();
-            this.updateStats();
-            this.hideLoading();
-            
-            // Update active category in navigation
-            this.setActiveCategory(category);
-            
-        } catch (error) {
-            this.hideLoading();
-            this.showError('Failed to load news for this category');
-            console.error('Category loading error:', error);
-        }
-    }
-
-    // ==================== UI MANAGEMENT METHODS ====================
-    
-    // Show loading spinner
-    showLoading() {
-        const loading = document.getElementById('loading');
-        if (loading) {
-            loading.style.display = 'flex';
-        }
-    }
-
-    // Hide loading spinner
-    hideLoading() {
-        const loading = document.getElementById('loading');
-        if (loading) {
-            loading.style.display = 'none';
-        }
-    }
-
-    // Show error message
-    showError(message) {
-        const errorContainer = document.getElementById('error-container');
-        const errorMessage = document.getElementById('error-message');
         
-        if (errorContainer && errorMessage) {
-            errorMessage.textContent = message;
-            errorContainer.style.display = 'block';
-        }
+        this.articles = mockArticles;
+        this.currentPage = 1;
+        this.totalPages = Math.ceil(this.articles.length / this.pageSize);
+        this.renderArticles();
+        this.hideLoading();
+        this.updateStats();
     }
 
-    // Show API key modal
-    showApiKeyModal() {
-        const modal = document.getElementById('api-key-modal');
-        if (modal) {
-            modal.classList.add('show');
-        }
-    }
-
-    // Hide API key modal
-    hideApiKeyModal() {
-        const modal = document.getElementById('api-key-modal');
-        if (modal) {
-            modal.classList.remove('show');
-        }
-    }
-
-    // Update statistics
-    updateStats() {
-        const articleCount = document.getElementById('article-count');
-        const lastUpdated = document.getElementById('last-updated');
-        const currentLanguage = document.getElementById('current-language');
-        
-        if (articleCount) {
-            articleCount.textContent = this.articles.length;
-        }
-        
-        if (lastUpdated) {
-            lastUpdated.textContent = 'Just now';
-        }
-        
-        if (currentLanguage) {
-            currentLanguage.textContent = this.getLanguageName(this.currentLanguage);
-        }
-    }
-
-    // Get language display name
-    getLanguageName(code) {
-        const languages = {
-            'en': 'English',
-            'es': 'Spanish',
-            'fr': 'French',
-            'de': 'German',
-            'it': 'Italian',
-            'pt': 'Portuguese'
-        };
-        return languages[code] || code;
-    }
-
-    // Set active category in navigation
-    setActiveCategory(category) {
-        document.querySelectorAll('.nav-link').forEach(link => {
-            if (link.dataset.category === category) {
-                link.classList.add('active');
-            } else {
-                link.classList.remove('active');
-            }
-        });
-    }
-
-    // Use demo mode
-    useDemoMode() {
-        this.apiKey = 'demo_key_placeholder';
-        localStorage.setItem('currents_api_key', this.apiKey);
-        this.hideApiKeyModal();
-        this.loadLatestNews();
-        this.showToast('Using demo mode - showing sample news articles', 'info');
-    }
-
-    // Save API key
-    saveApiKey() {
-        const input = document.getElementById('api-key-input');
-        const checkbox = document.getElementById('save-api-key');
-        
-        if (input && input.value.trim()) {
-            this.apiKey = input.value.trim();
-            
-            if (checkbox && checkbox.checked) {
-                localStorage.setItem('currents_api_key', this.apiKey);
-            }
-            
-            this.hideApiKeyModal();
-            this.loadLatestNews();
-            this.showToast('API key saved successfully!', 'success');
-        } else {
-            this.showToast('Please enter a valid API key', 'error');
-        }
-    }
-
-    // Reset API key
-    resetApiKey() {
-        localStorage.removeItem('currents_api_key');
-        this.apiKey = null;
-        this.showApiKeyModal();
-        this.showToast('API key removed. Please enter a new key.', 'info');
-    }
-
-    // Show toast notification
-    showToast(message, type = 'info') {
-        const container = document.getElementById('toast-container');
-        if (!container) return;
-
-        const toast = document.createElement('div');
-        toast.className = `toast ${type}`;
-        toast.innerHTML = `
-            <div class="toast-icon">
-                <i class="${this.getToastIcon(type)}"></i>
-            </div>
-            <div class="toast-message">${message}</div>
-            <button class="toast-close" onclick="this.parentElement.remove()">
-                <i class="fas fa-times"></i>
-            </button>
-        `;
-
-        container.appendChild(toast);
-
-        // Auto-remove after 3 seconds
-        setTimeout(() => {
-            if (toast.parentElement) {
-                toast.remove();
-            }
-        }, 3000);
-    }
-
-    // Get toast icon based on type
-    getToastIcon(type) {
-        switch (type) {
-            case 'success': return 'fas fa-check-circle';
-            case 'error': return 'fas fa-exclamation-circle';
-            case 'warning': return 'fas fa-exclamation-triangle';
-            case 'info': return 'fas fa-info-circle';
-            default: return 'fas fa-info-circle';
-        }
-    }
-
-    // Update pagination
-    updatePagination() {
-        const prevBtn = document.getElementById('prev-page');
-        const nextBtn = document.getElementById('next-page');
-        const currentPage = document.getElementById('current-page');
-        const totalPages = document.getElementById('total-pages');
-
-        if (prevBtn) {
-            prevBtn.disabled = this.currentPage <= 1;
-        }
-
-        if (nextBtn) {
-            nextBtn.disabled = this.currentPage >= this.totalPages;
-        }
-
-        if (currentPage) {
-            currentPage.textContent = this.currentPage;
-        }
-
-        if (totalPages) {
-            totalPages.textContent = this.totalPages;
-        }
-    }
-
-    // Load articles for current page
+    // ==================== PAGINATION ====================
     loadArticles() {
         this.renderArticles();
-        this.updatePagination();
-    }
-
-    // Truncate text to specified length
-    truncateText(text, maxLength) {
-        if (!text) return '';
-        if (text.length <= maxLength) return text;
-        return text.substring(0, maxLength) + '...';
-    }
-
-    // Show article modal
-    hideArticleModal() {
-        const modal = document.getElementById('article-modal');
-        if (modal) {
-            modal.classList.remove('show');
-        }
-    }
-
-    // Share article
-    async shareArticle(article) {
-        if (navigator.share) {
-            try {
-                await navigator.share({
-                    title: article.title,
-                    text: article.description,
-                    url: article.url
-                });
-            } catch (error) {
-                console.log('Share failed:', error);
-            }
-        } else {
-            // Fallback: copy URL to clipboard
-            try {
-                await navigator.clipboard.writeText(article.url);
-                this.showToast('Article link copied to clipboard', 'success');
-            } catch (error) {
-                this.showToast('Could not copy link', 'error');
-            }
-        }
-    }
-
-    // Toggle bookmark
-    toggleBookmark(article) {
-        const index = this.bookmarks.findIndex(b => b.id === article.id);
-        
-        if (index > -1) {
-            this.bookmarks.splice(index, 1);
-            this.showToast('Removed from bookmarks', 'info');
-        } else {
-            this.bookmarks.push(article);
-            this.showToast('Added to bookmarks', 'success');
-        }
-        
-        localStorage.setItem('currents_bookmarks', JSON.stringify(this.bookmarks));
-        
-        // Update modal button
-        const bookmarkBtn = document.getElementById('modal-bookmark');
-        if (bookmarkBtn) {
-            bookmarkBtn.innerHTML = index > -1 ? 
-                '<i class="far fa-bookmark"></i> Bookmark' : 
-                '<i class="fas fa-bookmark"></i> Remove Bookmark';
-        }
     }
 }
 
@@ -1843,3 +1140,5 @@ class CurrentsNewsApp {
 document.addEventListener('DOMContentLoaded', () => {
     window.newsApp = new CurrentsNewsApp();
 });
+
+const hash = window.location.hash; // "#/latest" or "#/search"

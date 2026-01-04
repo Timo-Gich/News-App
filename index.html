@@ -1,3 +1,4 @@
+index.html:
 <!DOCTYPE html>
 <html lang="en">
 
@@ -40,23 +41,10 @@
                     <li><a href="#" class="nav-link" data-category="technology"><i class="fas fa-laptop-code"></i> Tech</a></li>
                     <li><a href="#" class="nav-link" data-category="sports"><i class="fas fa-running"></i> Sports</a></li>
                     <li><a href="#" class="nav-link" data-category="entertainment"><i class="fas fa-film"></i> Entertainment</a></li>
-                    <!-- NEW: Offline Articles Nav Item -->
-                    <li>
-                        <a href="#" class="nav-link" data-category="offline" id="offline-nav-link" style="display: none;">
-                            <i class="fas fa-download"></i> Offline
-                            <span class="offline-count-badge" id="offline-count">0</span>
-                        </a>
-                    </li>
                 </ul>
             </nav>
 
             <div class="header-controls">
-                <!-- NEW: Offline Stats Indicator -->
-                <div class="offline-stats" id="offline-stats" style="display: none;">
-                    <i class="fas fa-download"></i>
-                    <span id="offline-article-count">0</span>
-                </div>
-
                 <button class="theme-toggle" title="Toggle dark mode">
                     <i class="fas fa-moon"></i>
                 </button>
@@ -85,10 +73,6 @@
                 </button>
                 <button id="advanced-toggle" class="btn btn-secondary">
                     <i class="fas fa-filter"></i> Filters
-                </button>
-                <!-- NEW: Offline Actions Button -->
-                <button id="offline-actions-btn" class="btn btn-secondary" style="display: none;">
-                    <i class="fas fa-download"></i> Offline
                 </button>
             </div>
 
@@ -154,10 +138,6 @@
                 <button id="retry-btn" class="btn btn-primary">
                     <i class="fas fa-redo"></i> Retry
                 </button>
-                <!-- NEW: Offline Fallback Button -->
-                <button id="offline-fallback-btn" class="btn btn-secondary" style="display: none; margin-top: 10px;">
-                    <i class="fas fa-download"></i> View Offline Articles
-                </button>
             </div>
 
             <!-- Stats Bar -->
@@ -171,13 +151,6 @@
                 </div>
                 <div class="stats-item">
                     <i class="fas fa-language"></i> Language: <span id="current-language">English</span>
-                </div>
-                <!-- NEW: Offline Cache Stats -->
-                <div class="stats-item" id="cache-stats" style="display: none;">
-                    <i class="fas fa-database"></i> Cache: <span id="cache-size">0 MB</span>
-                </div>
-                <div class="stats-item" id="last-sync-item" style="display: none;">
-                    <i class="fas fa-sync"></i> Last Sync: <span id="last-sync">Never</span>
                 </div>
             </div>
 
@@ -197,47 +170,6 @@
                 <button id="next-page" class="btn btn-secondary">
                     Next <i class="fas fa-chevron-right"></i>
                 </button>
-            </div>
-
-            <!-- NEW: Offline Management Section -->
-            <div class="offline-management-section" id="offline-management-section" style="display: none;">
-                <h2><i class="fas fa-download"></i> Offline Reading Management</h2>
-                <p>Manage your saved articles for offline reading.</p>
-
-                <div class="offline-controls">
-                    <div class="offline-control-group">
-                        <h4><i class="fas fa-database"></i> Storage</h4>
-                        <p>Used: <span id="storage-used">0 MB</span> / <span id="storage-total">50 MB</span></p>
-                        <div class="storage-bar">
-                            <div class="storage-progress" id="storage-progress" style="width: 0%"></div>
-                        </div>
-                    </div>
-
-                    <div class="offline-control-group">
-                        <h4><i class="fas fa-cog"></i> Actions</h4>
-                        <div class="offline-actions">
-                            <button id="download-current-btn" class="btn btn-secondary">
-                                <i class="fas fa-download"></i> Save Current Page
-                            </button>
-                            <button id="clear-cache-btn" class="btn btn-secondary">
-                                <i class="fas fa-trash"></i> Clear Cache
-                            </button>
-                            <button id="view-offline-btn" class="btn btn-primary">
-                                <i class="fas fa-newspaper"></i> View Offline Articles
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="offline-control-group">
-                        <h4><i class="fas fa-info-circle"></i> Offline Tips</h4>
-                        <ul class="offline-tips">
-                            <li><i class="fas fa-check-circle"></i> Articles with the download icon are available offline</li>
-                            <li><i class="fas fa-check-circle"></i> Bookmarked articles are automatically saved</li>
-                            <li><i class="fas fa-check-circle"></i> Connect to WiFi to save multiple articles</li>
-                            <li><i class="fas fa-check-circle"></i> Offline articles are searchable</li>
-                        </ul>
-                    </div>
-                </div>
             </div>
 
             <!-- Historical Search Section -->
@@ -265,9 +197,6 @@
                         <a href="https://currentsapi.services/" target="_blank">API Documentation</a>
                         <a href="#" id="view-source">View Source Code</a>
                         <a href="#" id="refresh-news">Refresh News</a>
-                        <!-- NEW: Offline Management Links -->
-                        <a href="#" id="toggle-offline-management">Offline Settings</a>
-                        <a href="#" id="clear-cache-footer">Clear Cache</a>
                     </div>
                 </div>
                 <div class="footer-section">
@@ -277,15 +206,6 @@
                         <div class="status-indicator" id="api-status">
                             <span class="status-dot"></span> API Status: <span class="status-text">Connected</span>
                         </div>
-                        <!-- NEW: Offline Status -->
-                        <div class="status-indicator" id="offline-status" style="display: none; margin-top: 10px;">
-                            <span class="status-dot offline"></span> Offline Mode: <span class="status-text offline">Active</span>
-                        </div>
-                    </div>
-                    <!-- NEW: Cache Status -->
-                    <div class="cache-info" id="cache-info" style="margin-top: 15px; display: none;">
-                        <p><i class="fas fa-database"></i> Offline Cache: <span id="footer-cache-size">0 articles</span></p>
-                        <p style="font-size: 12px; opacity: 0.7;">Last updated: <span id="footer-last-update">Never</span></p>
                     </div>
                 </div>
             </div>
@@ -311,10 +231,6 @@
                     <span id="modal-date">Date</span>
                     <span id="modal-author">Author</span>
                     <span id="modal-category">Category</span>
-                    <!-- NEW: Offline Availability Badge -->
-                    <span id="modal-offline-badge" style="display: none;">
-                        <i class="fas fa-download"></i> Available Offline
-                    </span>
                 </div>
                 <div class="modal-image-container">
                     <img id="modal-image" src="" alt="Article Image">
@@ -331,10 +247,6 @@
                     </button>
                     <button id="modal-bookmark" class="btn btn-secondary">
                         <i class="far fa-bookmark"></i> Bookmark
-                    </button>
-                    <!-- NEW: Save for Offline Button -->
-                    <button id="save-for-offline" class="btn btn-secondary">
-                        <i class="fas fa-download"></i> Save Offline
                     </button>
                 </div>
             </div>
@@ -392,68 +304,6 @@
         </div>
     </div>
 
-    <!-- NEW: Offline Cache Management Modal -->
-    <div class="modal" id="cache-management-modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2><i class="fas fa-database"></i> Offline Cache Management</h2>
-                <button class="modal-close" id="cache-modal-close">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-            <div class="modal-body">
-                <div class="cache-stats">
-                    <div class="stat-item">
-                        <i class="fas fa-newspaper"></i>
-                        <div>
-                            <h4>Articles Stored</h4>
-                            <p id="cache-article-count">0</p>
-                        </div>
-                    </div>
-                    <div class="stat-item">
-                        <i class="fas fa-database"></i>
-                        <div>
-                            <h4>Storage Used</h4>
-                            <p id="cache-storage-used">0 MB</p>
-                        </div>
-                    </div>
-                    <div class="stat-item">
-                        <i class="fas fa-clock"></i>
-                        <div>
-                            <h4>Last Updated</h4>
-                            <p id="cache-last-updated">Never</p>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="cache-actions">
-                    <h3><i class="fas fa-cog"></i> Actions</h3>
-                    <div class="action-buttons">
-                        <button id="refresh-cache-btn" class="btn btn-secondary">
-                            <i class="fas fa-sync"></i> Refresh Cache
-                        </button>
-                        <button id="download-all-btn" class="btn btn-secondary">
-                            <i class="fas fa-download"></i> Save All Current
-                        </button>
-                        <button id="clear-cache-confirm-btn" class="btn btn-danger">
-                            <i class="fas fa-trash"></i> Clear All Cache
-                        </button>
-                    </div>
-                </div>
-
-                <div class="cache-info">
-                    <h3><i class="fas fa-info-circle"></i> Information</h3>
-                    <ul>
-                        <li>Articles are automatically cached when you read them</li>
-                        <li>Bookmarked articles are permanently saved</li>
-                        <li>Cache is cleared when storage is full (oldest first)</li>
-                        <li>Offline articles remain available for 30 days</li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <!-- Toast Notifications -->
     <div class="toast-container" id="toast-container"></div>
 
@@ -463,28 +313,7 @@
     <span>Install App</span>
 </button>
 
-    <!-- NEW: Offline Mode Indicator (Fixed) -->
-    <div class="offline-indicator" id="offline-indicator" style="display: none;">
-        <i class="fas fa-wifi-slash"></i>
-        <span>Working Offline</span>
-        <button id="offline-indicator-close" class="btn-close">
-            <i class="fas fa-times"></i>
-        </button>
-    </div>
-
-    <!-- NEW: Quick Action Buttons (Floating) -->
-    <div class="quick-actions" id="quick-actions">
-        <button class="quick-action" id="quick-offline" title="Save for Offline">
-            <i class="fas fa-download"></i>
-        </button>
-        <button class="quick-action" id="quick-cache" title="Cache Management">
-            <i class="fas fa-database"></i>
-        </button>
-    </div>
-
-    <script src="offline-integration.js"></script>
     <script src="script.js"></script>
-
 </body>
 
 </html>
