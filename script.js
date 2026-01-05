@@ -58,6 +58,19 @@ class CurrentsNewsApp {
 
         // Initialize offline UI elements
         this.initializeOfflineUI();
+
+        // Initialize theme toggle button state
+        this.initializeThemeToggle();
+    }
+
+    initializeThemeToggle() {
+        const themeToggle = document.querySelector('.theme-toggle');
+        if (themeToggle) {
+            const themeIcon = themeToggle.querySelector('i');
+            if (themeIcon) {
+                themeIcon.className = this.isDarkMode ? 'fas fa-sun' : 'fas fa-moon';
+            }
+        }
     }
 
     // ==================== OFFLINE UI INITIALIZATION ====================
@@ -494,12 +507,16 @@ class CurrentsNewsApp {
         };
 
         // Theme toggle
-        addClassListener('.theme-toggle', 'click', () => {
-            this.toggleTheme();
-        });
+        const themeToggle = document.querySelector('.theme-toggle');
+        if (themeToggle) {
+            themeToggle.addEventListener('click', () => {
+                this.toggleTheme();
+            });
+        }
 
         // Navigation category clicks
-        document.querySelectorAll('.nav-link').forEach(link => {
+        const navLinks = document.querySelectorAll('.nav-link');
+        navLinks.forEach(link => {
             link.addEventListener('click', (e) => {
                 e.preventDefault();
                 const category = e.currentTarget.dataset.category;
@@ -509,92 +526,141 @@ class CurrentsNewsApp {
         });
 
         // Language change
-        addIdListener('language-select', 'change', (e) => {
-            this.currentLanguage = e.target.value;
-            this.updateStats();
-            this.loadCategoryNews(this.currentCategory);
-        });
+        const languageSelect = document.getElementById('language-select');
+        if (languageSelect) {
+            languageSelect.addEventListener('change', (e) => {
+                this.currentLanguage = e.target.value;
+                this.updateStats();
+                this.loadCategoryNews(this.currentCategory);
+            });
+        }
 
         // Search
-        addIdListener('search-btn', 'click', () => {
-            this.performSearch();
-        });
+        const searchBtn = document.getElementById('search-btn');
+        const searchInput = document.getElementById('search-input');
 
-        addIdListener('search-input', 'keypress', (e) => {
-            if (e.key === 'Enter') {
+        if (searchBtn) {
+            searchBtn.addEventListener('click', () => {
                 this.performSearch();
-            }
-        });
+            });
+        }
+
+        if (searchInput) {
+            searchInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    this.performSearch();
+                }
+            });
+        }
 
         // Advanced filters toggle
-        addIdListener('advanced-toggle', 'click', () => {
-            const filters = document.getElementById('advanced-filters');
-            if (filters) {
-                filters.classList.toggle('show');
-            }
-        });
+        const advancedToggle = document.getElementById('advanced-toggle');
+        if (advancedToggle) {
+            advancedToggle.addEventListener('click', () => {
+                const filters = document.getElementById('advanced-filters');
+                if (filters) {
+                    filters.classList.toggle('show');
+                }
+            });
+        }
 
         // Apply filters
-        addIdListener('apply-filters', 'click', () => {
-            this.applyFilters();
-        });
+        const applyFiltersBtn = document.getElementById('apply-filters');
+        const clearFiltersBtn = document.getElementById('clear-filters');
 
-        // Clear filters
-        addIdListener('clear-filters', 'click', () => {
-            this.clearFilters();
-        });
+        if (applyFiltersBtn) {
+            applyFiltersBtn.addEventListener('click', () => {
+                this.applyFilters();
+            });
+        }
+
+        if (clearFiltersBtn) {
+            clearFiltersBtn.addEventListener('click', () => {
+                this.clearFilters();
+            });
+        }
 
         // Pagination
-        addIdListener('prev-page', 'click', () => {
-            if (this.currentPage > 1) {
-                this.currentPage--;
-                this.loadArticles();
-            }
-        });
+        const prevPageBtn = document.getElementById('prev-page');
+        const nextPageBtn = document.getElementById('next-page');
 
-        addIdListener('next-page', 'click', () => {
-            if (this.currentPage < this.totalPages) {
-                this.currentPage++;
-                this.loadArticles();
-            }
-        });
+        if (prevPageBtn) {
+            prevPageBtn.addEventListener('click', () => {
+                if (this.currentPage > 1) {
+                    this.currentPage--;
+                    this.loadArticles();
+                }
+            });
+        }
+
+        if (nextPageBtn) {
+            nextPageBtn.addEventListener('click', () => {
+                if (this.currentPage < this.totalPages) {
+                    this.currentPage++;
+                    this.loadArticles();
+                }
+            });
+        }
 
         // Historical search
-        addIdListener('historical-search-btn', 'click', () => {
-            this.performHistoricalSearch();
-        });
+        const historicalSearchBtn = document.getElementById('historical-search-btn');
+        const historicalSearchInput = document.getElementById('historical-search');
 
-        addIdListener('historical-search', 'keypress', (e) => {
-            if (e.key === 'Enter') {
+        if (historicalSearchBtn) {
+            historicalSearchBtn.addEventListener('click', () => {
                 this.performHistoricalSearch();
-            }
-        });
+            });
+        }
+
+        if (historicalSearchInput) {
+            historicalSearchInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    this.performHistoricalSearch();
+                }
+            });
+        }
 
         // Refresh news
-        addIdListener('refresh-news', 'click', (e) => {
-            e.preventDefault();
-            this.loadCategoryNews(this.currentCategory);
-        });
+        const refreshNewsLink = document.getElementById('refresh-news');
+        const retryBtn = document.getElementById('retry-btn');
 
-        // Retry button
-        addIdListener('retry-btn', 'click', () => {
-            this.loadCategoryNews(this.currentCategory);
-        });
+        if (refreshNewsLink) {
+            refreshNewsLink.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.loadCategoryNews(this.currentCategory);
+            });
+        }
+
+        if (retryBtn) {
+            retryBtn.addEventListener('click', () => {
+                this.loadCategoryNews(this.currentCategory);
+            });
+        }
 
         // API Key modal
-        addIdListener('save-key-btn', 'click', () => {
-            this.saveApiKey();
-        });
+        const saveKeyBtn = document.getElementById('save-key-btn');
+        const tryDemoBtn = document.getElementById('try-demo-btn');
 
-        addIdListener('try-demo-btn', 'click', () => {
-            this.useDemoMode();
-        });
+        if (saveKeyBtn) {
+            saveKeyBtn.addEventListener('click', () => {
+                this.saveApiKey();
+            });
+        }
+
+        if (tryDemoBtn) {
+            tryDemoBtn.addEventListener('click', () => {
+                this.useDemoMode();
+            });
+        }
 
         // Reset API key
-        addIdListener('reset-api-key', 'click', (e) => {
-            e.preventDefault();
-            this.resetApiKey();
-        });
+        const resetApiKeyLink = document.getElementById('reset-api-key');
+        if (resetApiKeyLink) {
+            resetApiKeyLink.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.resetApiKey();
+            });
+        }
 
         // Close modal when clicking outside
         window.addEventListener('click', (e) => {
@@ -605,17 +671,23 @@ class CurrentsNewsApp {
         });
 
         // Modal close buttons
-        addIdListener('modal-close', 'click', () => {
-            this.hideArticleModal();
-        });
+        const modalClose = document.getElementById('modal-close');
+        if (modalClose) {
+            modalClose.addEventListener('click', () => {
+                this.hideArticleModal();
+            });
+        }
 
         // Mobile menu toggle
-        addClassListener('.nav-toggle', 'click', () => {
-            const navMenu = document.querySelector('.nav-menu');
-            if (navMenu) {
-                navMenu.classList.toggle('show');
-            }
-        });
+        const navToggle = document.querySelector('.nav-toggle');
+        if (navToggle) {
+            navToggle.addEventListener('click', () => {
+                const navMenu = document.querySelector('.nav-menu');
+                if (navMenu) {
+                    navMenu.classList.toggle('show');
+                }
+            });
+        }
 
         // Close mobile menu when clicking a link
         document.querySelectorAll('.nav-link').forEach(link => {
@@ -628,9 +700,12 @@ class CurrentsNewsApp {
         });
 
         // PWA Install button
-        addIdListener('install-btn', 'click', () => {
-            this.installPWA();
-        });
+        const installBtn = document.getElementById('install-btn');
+        if (installBtn) {
+            installBtn.addEventListener('click', () => {
+                this.installPWA();
+            });
+        }
 
         // Listen for beforeinstallprompt event
         window.addEventListener('beforeinstallprompt', (e) => {
@@ -881,6 +956,7 @@ class CurrentsNewsApp {
     createArticleCard(article) {
             const card = document.createElement('div');
             card.className = 'news-card';
+            card.setAttribute('data-article-id', article.id);
 
             // Format date
             const date = new Date(article.published);
