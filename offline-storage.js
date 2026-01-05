@@ -439,44 +439,50 @@ class OfflineStorage {
             let offlineCount = 0;
             let readCount = 0;
 
-            const articlesRequest = articlesStore.count();
-            articlesRequest.onsuccess = () => {
-                articlesCount = articlesRequest.result;
-            };
+            try {
+                const articlesRequest = articlesStore.count();
+                articlesRequest.onsuccess = () => {
+                    articlesCount = articlesRequest.result;
+                };
 
-            const bookmarksRequest = bookmarksStore.count();
-            bookmarksRequest.onsuccess = () => {
-                bookmarksCount = bookmarksRequest.result;
-            };
+                const bookmarksRequest = bookmarksStore.count();
+                bookmarksRequest.onsuccess = () => {
+                    bookmarksCount = bookmarksRequest.result;
+                };
 
-            const progressRequest = progressStore.count();
-            progressRequest.onsuccess = () => {
-                progressCount = progressRequest.result;
-            };
+                const progressRequest = progressStore.count();
+                progressRequest.onsuccess = () => {
+                    progressCount = progressRequest.result;
+                };
 
-            const offlineRequest = articlesStore.index('savedForOffline').count(IDBKeyRange.only(true));
-            offlineRequest.onsuccess = () => {
-                offlineCount = offlineRequest.result;
-            };
+                const offlineRequest = articlesStore.index('savedForOffline').count(IDBKeyRange.only(true));
+                offlineRequest.onsuccess = () => {
+                    offlineCount = offlineRequest.result;
+                };
 
-            const readRequest = articlesStore.index('read').count(IDBKeyRange.only(true));
-            readRequest.onsuccess = () => {
-                readCount = readRequest.result;
-            };
+                const readRequest = articlesStore.index('read').count(IDBKeyRange.only(true));
+                readRequest.onsuccess = () => {
+                    readCount = readRequest.result;
+                };
 
-            transaction.oncomplete = () => {
-                resolve({
-                    totalArticles: articlesCount,
-                    bookmarkedArticles: bookmarksCount,
-                    offlineArticles: offlineCount,
-                    readArticles: readCount,
-                    articlesWithProgress: progressCount
-                });
-            };
+                transaction.oncomplete = () => {
+                    resolve({
+                        totalArticles: articlesCount,
+                        bookmarkedArticles: bookmarksCount,
+                        offlineArticles: offlineCount,
+                        readArticles: readCount,
+                        articlesWithProgress: progressCount
+                    });
+                };
 
-            transaction.onerror = (event) => {
-                reject(event.target.error);
-            };
+                transaction.onerror = (event) => {
+                    console.error('Transaction error in getStorageStats:', event.target.error);
+                    reject(event.target.error);
+                };
+            } catch (error) {
+                console.error('Error in getStorageStats:', error);
+                reject(error);
+            }
         });
     }
 

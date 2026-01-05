@@ -23,7 +23,7 @@ class CacheController {
 
         try {
             // Register service worker
-            this.registration = await navigator.serviceWorker.register('service-worker.js', {
+            this.registration = await navigator.serviceWorker.register('sw.js', {
                 scope: '/',
                 updateViaCache: 'none'
             });
