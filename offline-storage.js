@@ -1,679 +1,709 @@
-/**
- * OfflineStorage Module
- * IndexedDB wrapper for persistent article storage and offline functionality
- */
-
+// offline-storage.js - IndexedDB wrapper for offline article storage
 class OfflineStorage {
     constructor() {
-        this.dbName = 'veritas-news-db';
-        this.version = 1;
+        this.dbName = 'CurrentsNewsDB';
+        this.version = 2;
         this.db = null;
-        this.isSupported = this.checkSupport();
-
-        if (this.isSupported) {
-            this.init();
-        }
+        this.isAvailable = 'indexedDB' in window;
+        this.maxStorageDays = 30;
+        this.maxArticles = 1000;
     }
 
-    /**
-     * Check if IndexedDB is supported
-     */
-    checkSupport() {
-        return 'indexedDB' in window;
-    }
-
-    /**
-     * Initialize IndexedDB database
-     */
     async init() {
-        if (!this.isSupported) {
-            console.warn('IndexedDB not supported, offline features disabled');
-            return;
+        if (!this.isAvailable) {
+            console.warn('IndexedDB not available, offline features disabled');
+            return false;
         }
 
         return new Promise((resolve, reject) => {
             const request = indexedDB.open(this.dbName, this.version);
 
-            request.onerror = () => {
-                console.error('Failed to open IndexedDB:', request.error);
-                reject(request.error);
+            request.onerror = function(event) {
+                console.error('IndexedDB error:', event.target.error);
+                reject(event.target.error);
             };
 
             request.onsuccess = (event) => {
                 this.db = event.target.result;
                 console.log('IndexedDB initialized successfully');
-                resolve(this.db);
+
+                // Setup auto-cleanup on open
+                this.cleanupOldArticles();
+
+                resolve(true);
             };
 
             request.onupgradeneeded = (event) => {
                 const db = event.target.result;
-                this.createStores(db);
+                const oldVersion = event.oldVersion || 0;
+
+                // Create articles store
+                if (!db.objectStoreNames.contains('articles')) {
+                    const articlesStore = db.createObjectStore('articles', { keyPath: 'id' });
+                    articlesStore.createIndex('category', 'category', { multiEntry: true });
+                    articlesStore.createIndex('published', 'published');
+                    articlesStore.createIndex('savedDate', 'savedDate');
+                    articlesStore.createIndex('savedForOffline', 'savedForOffline');
+                    articlesStore.createIndex('read', 'read');
+                }
+
+                // Create bookmarks store
+                if (!db.objectStoreNames.contains('bookmarks')) {
+                    const bookmarksStore = db.createObjectStore('bookmarks', { keyPath: 'id' });
+                    bookmarksStore.createIndex('dateAdded', 'dateAdded');
+                }
+
+                // Create reading progress store
+                if (!db.objectStoreNames.contains('progress')) {
+                    const progressStore = db.createObjectStore('progress', { keyPath: 'articleId' });
+                    progressStore.createIndex('lastRead', 'lastRead');
+                    progressStore.createIndex('progress', 'progress');
+                }
+
+                // Create offline actions queue
+                if (!db.objectStoreNames.contains('actions')) {
+                    const actionsStore = db.createObjectStore('actions', {
+                        keyPath: 'id',
+                        autoIncrement: true
+                    });
+                    actionsStore.createIndex('type', 'type');
+                    actionsStore.createIndex('status', 'status');
+                    actionsStore.createIndex('timestamp', 'timestamp');
+                }
+
+                // Create settings store
+                if (!db.objectStoreNames.contains('settings')) {
+                    db.createObjectStore('settings', { keyPath: 'key' });
+                }
+
+                // Migrate from version 1 to 2
+                if (oldVersion < 2) {
+                    // Add new indexes or modify existing ones
+                }
             };
         });
     }
 
-    /**
-     * Create object stores and indexes
-     */
-    createStores(db) {
-        // Articles store
-        if (!db.objectStoreNames.contains('articles')) {
-            const articlesStore = db.createObjectStore('articles', { keyPath: 'id' });
-            articlesStore.createIndex('published', 'published', { unique: false });
-            articlesStore.createIndex('category', 'category', { unique: false });
-            articlesStore.createIndex('saved_at', 'saved_at', { unique: false });
-            articlesStore.createIndex('read_progress', 'read_progress', { unique: false });
+    async saveArticle(article, saveForOffline = false) {
+        if (!this.db || !article || !article.id) {
+            return false;
         }
 
-        // Bookmarks store
-        if (!db.objectStoreNames.contains('bookmarks')) {
-            const bookmarksStore = db.createObjectStore('bookmarks', { keyPath: 'article_id' });
-            bookmarksStore.createIndex('bookmarked_at', 'bookmarked_at', { unique: false });
-            bookmarksStore.createIndex('offline_queued', 'offline_queued', { unique: false });
-        }
-
-        // Reading progress store
-        if (!db.objectStoreNames.contains('reading_progress')) {
-            const progressStore = db.createObjectStore('reading_progress', { keyPath: 'article_id' });
-            progressStore.createIndex('last_read', 'last_read', { unique: false });
-            progressStore.createIndex('read_percentage', 'read_percentage', { unique: false });
-        }
-
-        // Action queue store
-        if (!db.objectStoreNames.contains('action_queue')) {
-            const queueStore = db.createObjectStore('action_queue', { keyPath: 'id', autoIncrement: true });
-            queueStore.createIndex('action_type', 'action_type', { unique: false });
-            queueStore.createIndex('timestamp', 'timestamp', { unique: false });
-            queueStore.createIndex('synced', 'synced', { unique: false });
-        }
-
-        // Search index store
-        if (!db.objectStoreNames.contains('search_index')) {
-            const searchStore = db.createObjectStore('search_index', { keyPath: 'article_id' });
-            searchStore.createIndex('keywords', 'keywords', { unique: false });
-            searchStore.createIndex('searchable_text', 'searchable_text', { unique: false });
-        }
-
-        // Storage metadata store
-        if (!db.objectStoreNames.contains('storage_meta')) {
-            db.createObjectStore('storage_meta', { keyPath: 'key' });
-        }
-    }
-
-    /**
-     * Store an article with full metadata
-     */
-    async storeArticle(article) {
-        if (!this.db) return false;
-
-        try {
+        return new Promise((resolve, reject) => {
             const transaction = this.db.transaction(['articles'], 'readwrite');
             const store = transaction.objectStore('articles');
 
-            const articleData = {
+            const articleToSave = {
                 ...article,
-                saved_at: new Date().toISOString(),
-                read_progress: 0,
-                offline_available: true
+                savedDate: new Date().toISOString(),
+                savedForOffline: saveForOffline,
+                read: article.read || false
             };
 
-            await new Promise((resolve, reject) => {
-                const request = store.put(articleData);
-                request.onsuccess = () => resolve(request.result);
-                request.onerror = () => reject(request.error);
-            });
+            const request = store.put(articleToSave);
 
-            // Update search index
-            await this.updateSearchIndex(articleData);
+            request.onsuccess = () => {
+                console.log('Article saved to IndexedDB:', article.id);
+                resolve(true);
+            };
 
-            // Update storage metadata
-            await this.updateStorageMetadata();
-
-            return true;
-        } catch (error) {
-            console.error('Failed to store article:', error);
-            return false;
-        }
+            request.onerror = (event) => {
+                console.error('Error saving article:', event.target.error);
+                reject(event.target.error);
+            };
+        });
     }
 
-    /**
-     * Retrieve an article by ID
-     */
     async getArticle(id) {
         if (!this.db) return null;
 
-        try {
-            const transaction = this.db.transaction(['articles'], 'readonly');
-            const store = transaction.objectStore('articles');
-
-            return new Promise((resolve, reject) => {
-                const request = store.get(id);
-                request.onsuccess = () => resolve(request.result);
-                request.onerror = () => reject(request.error);
-            });
-        } catch (error) {
-            console.error('Failed to get article:', error);
-            return null;
-        }
-    }
-
-    /**
-     * Get all stored articles
-     */
-    async getAllArticles() {
-        if (!this.db) return [];
-
-        try {
-            const transaction = this.db.transaction(['articles'], 'readonly');
-            const store = transaction.objectStore('articles');
-
-            return new Promise((resolve, reject) => {
-                const articles = [];
-                const request = store.openCursor();
-
-                request.onsuccess = (event) => {
-                    const cursor = event.target.result;
-                    if (cursor) {
-                        articles.push(cursor.value);
-                        cursor.continue();
-                    } else {
-                        resolve(articles);
-                    }
-                };
-
-                request.onerror = () => reject(request.error);
-            });
-        } catch (error) {
-            console.error('Failed to get all articles:', error);
-            return [];
-        }
-    }
-
-    /**
-     * Delete an article
-     */
-    async deleteArticle(id) {
-        if (!this.db) return false;
-
-        try {
-            const transaction = this.db.transaction(['articles', 'search_index'], 'readwrite');
-            const articlesStore = transaction.objectStore('articles');
-            const searchStore = transaction.objectStore('search_index');
-
-            await Promise.all([
-                new Promise((resolve, reject) => {
-                    const request = articlesStore.delete(id);
-                    request.onsuccess = () => resolve();
-                    request.onerror = () => reject(request.error);
-                }),
-                new Promise((resolve, reject) => {
-                    const request = searchStore.delete(id);
-                    request.onsuccess = () => resolve();
-                    request.onerror = () => reject(request.error);
-                })
-            ]);
-
-            await this.updateStorageMetadata();
-            return true;
-        } catch (error) {
-            console.error('Failed to delete article:', error);
-            return false;
-        }
-    }
-
-    /**
-     * Update reading progress
-     */
-    async updateReadingProgress(articleId, scrollPosition, readPercentage) {
-        if (!this.db) return false;
-
-        try {
-            const transaction = this.db.transaction(['reading_progress'], 'readwrite');
-            const store = transaction.objectStore('reading_progress');
-
-            const progressData = {
-                article_id: articleId,
-                scroll_position: scrollPosition,
-                read_percentage: readPercentage,
-                last_read: new Date().toISOString()
-            };
-
-            await new Promise((resolve, reject) => {
-                const request = store.put(progressData);
-                request.onsuccess = () => resolve();
-                request.onerror = () => reject(request.error);
-            });
-
-            return true;
-        } catch (error) {
-            console.error('Failed to update reading progress:', error);
-            return false;
-        }
-    }
-
-    /**
-     * Get reading progress for an article
-     */
-    async getReadingProgress(articleId) {
-        if (!this.db) return null;
-
-        try {
-            const transaction = this.db.transaction(['reading_progress'], 'readonly');
-            const store = transaction.objectStore('reading_progress');
-
-            return new Promise((resolve, reject) => {
-                const request = store.get(articleId);
-                request.onsuccess = () => resolve(request.result);
-                request.onerror = () => reject(request.error);
-            });
-        } catch (error) {
-            console.error('Failed to get reading progress:', error);
-            return null;
-        }
-    }
-
-    /**
-     * Toggle bookmark status
-     */
-    async toggleBookmark(articleId, isBookmarked) {
-        if (!this.db) return false;
-
-        try {
-            const transaction = this.db.transaction(['bookmarks'], 'readwrite');
-            const store = transaction.objectStore('bookmarks');
-
-            if (isBookmarked) {
-                // Add bookmark
-                const bookmarkData = {
-                    article_id: articleId,
-                    bookmarked_at: new Date().toISOString(),
-                    offline_queued: !navigator.onLine
-                };
-
-                await new Promise((resolve, reject) => {
-                    const request = store.put(bookmarkData);
-                    request.onsuccess = () => resolve();
-                    request.onerror = () => reject(request.error);
-                });
-            } else {
-                // Remove bookmark
-                await new Promise((resolve, reject) => {
-                    const request = store.delete(articleId);
-                    request.onsuccess = () => resolve();
-                    request.onerror = () => reject(request.error);
-                });
-            }
-
-            return true;
-        } catch (error) {
-            console.error('Failed to toggle bookmark:', error);
-            return false;
-        }
-    }
-
-    /**
-     * Get all bookmarks
-     */
-    async getBookmarks() {
-        if (!this.db) return [];
-
-        try {
-            const transaction = this.db.transaction(['bookmarks'], 'readonly');
-            const store = transaction.objectStore('bookmarks');
-
-            return new Promise((resolve, reject) => {
-                const bookmarks = [];
-                const request = store.openCursor();
-
-                request.onsuccess = (event) => {
-                    const cursor = event.target.result;
-                    if (cursor) {
-                        bookmarks.push(cursor.value);
-                        cursor.continue();
-                    } else {
-                        resolve(bookmarks);
-                    }
-                };
-
-                request.onerror = () => reject(request.error);
-            });
-        } catch (error) {
-            console.error('Failed to get bookmarks:', error);
-            return [];
-        }
-    }
-
-    /**
-     * Queue an action for offline sync
-     */
-    async queueAction(actionType, data) {
-        if (!this.db) return false;
-
-        try {
-            const transaction = this.db.transaction(['action_queue'], 'readwrite');
-            const store = transaction.objectStore('action_queue');
-
-            const actionData = {
-                action_type: actionType,
-                data: data,
-                timestamp: new Date().toISOString(),
-                synced: false
-            };
-
-            await new Promise((resolve, reject) => {
-                const request = store.add(actionData);
-                request.onsuccess = () => resolve();
-                request.onerror = () => reject(request.error);
-            });
-
-            return true;
-        } catch (error) {
-            console.error('Failed to queue action:', error);
-            return false;
-        }
-    }
-
-    /**
-     * Get pending actions for sync
-     */
-    async getPendingActions() {
-        if (!this.db) return [];
-
-        try {
-            const transaction = this.db.transaction(['action_queue'], 'readonly');
-            const store = transaction.objectStore('action_queue');
-            const index = store.index('synced');
-
-            return new Promise((resolve, reject) => {
-                const actions = [];
-                const request = index.getAll(false);
-
-                request.onsuccess = () => resolve(request.result);
-                request.onerror = () => reject(request.error);
-            });
-        } catch (error) {
-            console.error('Failed to get pending actions:', error);
-            return [];
-        }
-    }
-
-    /**
-     * Mark action as synced
-     */
-    async markActionSynced(actionId) {
-        if (!this.db) return false;
-
-        try {
-            const transaction = this.db.transaction(['action_queue'], 'readwrite');
-            const store = transaction.objectStore('action_queue');
-
-            const request = store.get(actionId);
-            request.onsuccess = () => {
-                const action = request.result;
-                if (action) {
-                    action.synced = true;
-                    store.put(action);
-                }
-            };
-
-            return true;
-        } catch (error) {
-            console.error('Failed to mark action as synced:', error);
-            return false;
-        }
-    }
-
-    /**
-     * Update search index for an article
-     */
-    async updateSearchIndex(article) {
-        if (!this.db) return false;
-
-        try {
-            const transaction = this.db.transaction(['search_index'], 'readwrite');
-            const store = transaction.objectStore('search_index');
-
-            // Create searchable text
-            const searchableText = [
-                article.title,
-                article.description || '',
-                article.category ? article.category.join(' ') : '',
-                article.author || ''
-            ].join(' ').toLowerCase();
-
-            // Extract keywords (simple implementation)
-            const keywords = this.extractKeywords(searchableText);
-
-            const searchData = {
-                article_id: article.id,
-                searchable_text: searchableText,
-                keywords: keywords
-            };
-
-            await new Promise((resolve, reject) => {
-                const request = store.put(searchData);
-                request.onsuccess = () => resolve();
-                request.onerror = () => reject(request.error);
-            });
-
-            return true;
-        } catch (error) {
-            console.error('Failed to update search index:', error);
-            return false;
-        }
-    }
-
-    /**
-     * Search articles offline
-     */
-    async searchArticles(query) {
-        if (!this.db) return [];
-
-        try {
-            const transaction = this.db.transaction(['search_index', 'articles'], 'readonly');
-            const searchStore = transaction.objectStore('search_index');
-            const articlesStore = transaction.objectStore('articles');
-
-            const searchQuery = query.toLowerCase();
-            const results = [];
-
-            return new Promise((resolve, reject) => {
-                const request = searchStore.openCursor();
-
-                request.onsuccess = async(event) => {
-                    const cursor = event.target.result;
-                    if (cursor) {
-                        const searchData = cursor.value;
-
-                        // Simple text matching
-                        if (searchData.searchable_text.includes(searchQuery)) {
-                            try {
-                                const articleRequest = articlesStore.get(searchData.article_id);
-                                articleRequest.onsuccess = () => {
-                                    if (articleRequest.result) {
-                                        results.push(articleRequest.result);
-                                    }
-                                    cursor.continue();
-                                };
-                                articleRequest.onerror = () => cursor.continue();
-                            } catch (error) {
-                                console.error('Error getting article:', error);
-                                cursor.continue();
-                            }
-                        } else {
-                            cursor.continue();
-                        }
-                    } else {
-                        resolve(results);
-                    }
-                };
-
-                request.onerror = () => reject(request.error);
-            });
-        } catch (error) {
-            console.error('Failed to search articles:', error);
-            return [];
-        }
-    }
-
-    /**
-     * Extract keywords from text (simple implementation)
-     */
-    extractKeywords(text) {
-        const stopWords = ['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'];
-        const words = text.split(/\s+/);
-        const keywords = words
-            .map(word => word.replace(/[^a-zA-Z0-9]/g, ''))
-            .filter(word => word.length > 3 && !stopWords.includes(word))
-            .filter((word, index, arr) => arr.indexOf(word) === index); // Remove duplicates
-
-        return keywords.slice(0, 10); // Limit to 10 keywords
-    }
-
-    /**
-     * Clean up old articles (30-day retention)
-     */
-    async cleanupOldArticles() {
-        if (!this.db) return false;
-
-        try {
-            const cutoffDate = new Date();
-            cutoffDate.setDate(cutoffDate.getDate() - 30);
-
-            const transaction = this.db.transaction(['articles'], 'readwrite');
-            const store = transaction.objectStore('articles');
-            const index = store.index('saved_at');
-
-            const oldArticles = [];
-            const request = index.openCursor(IDBKeyRange.upperBound(cutoffDate.toISOString()));
-
-            return new Promise((resolve, reject) => {
-                request.onsuccess = (event) => {
-                    const cursor = event.target.result;
-                    if (cursor) {
-                        oldArticles.push(cursor.value.id);
-                        cursor.continue();
-                    } else {
-                        // Delete old articles
-                        Promise.all(
-                            oldArticles.map(id => this.deleteArticle(id))
-                        ).then(() => resolve(true)).catch(reject);
-                    }
-                };
-
-                request.onerror = () => reject(request.error);
-            });
-        } catch (error) {
-            console.error('Failed to cleanup old articles:', error);
-            return false;
-        }
-    }
-
-    /**
-     * Get storage usage information
-     */
-    async getStorageUsage() {
-        if (!this.db) return { articles: 0, bookmarks: 0, queue: 0, totalSize: 0 };
-
-        try {
-            const transaction = this.db.transaction(['articles', 'bookmarks', 'action_queue'], 'readonly');
-            const articlesStore = transaction.objectStore('articles');
-            const bookmarksStore = transaction.objectStore('bookmarks');
-            const queueStore = transaction.objectStore('action_queue');
-
-            const counts = await Promise.all([
-                this.countStore(articlesStore),
-                this.countStore(bookmarksStore),
-                this.countStore(queueStore)
-            ]);
-
-            return {
-                articles: counts[0],
-                bookmarks: counts[1],
-                queue: counts[2],
-                totalSize: counts.reduce((sum, count) => sum + count, 0)
-            };
-        } catch (error) {
-            console.error('Failed to get storage usage:', error);
-            return { articles: 0, bookmarks: 0, queue: 0, totalSize: 0 };
-        }
-    }
-
-    /**
-     * Count items in a store
-     */
-    async countStore(store) {
         return new Promise((resolve, reject) => {
-            const request = store.count();
-            request.onsuccess = () => resolve(request.result);
-            request.onerror = () => reject(request.error);
+            const transaction = this.db.transaction(['articles'], 'readonly');
+            const store = transaction.objectStore('articles');
+            const request = store.get(id);
+
+            request.onsuccess = () => {
+                resolve(request.result);
+            };
+
+            request.onerror = (event) => {
+                console.error('Error getting article:', event.target.error);
+                reject(event.target.error);
+            };
         });
     }
 
-    /**
-     * Update storage metadata
-     */
-    async updateStorageMetadata() {
-        if (!this.db) return false;
+    async getOfflineArticles(limit = 100, offset = 0) {
+        if (!this.db) return [];
 
-        try {
-            const usage = await this.getStorageUsage();
-            const metadata = {
-                key: 'storage_stats',
-                last_updated: new Date().toISOString(),
-                ...usage
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction(['articles'], 'readonly');
+            const store = transaction.objectStore('articles');
+            const index = store.index('savedForOffline');
+            const range = IDBKeyRange.only(true);
+            const articles = [];
+            let count = 0;
+
+            const request = index.openCursor(range);
+
+            request.onsuccess = (event) => {
+                const cursor = event.target.result;
+
+                if (cursor && count < offset + limit) {
+                    if (count >= offset) {
+                        articles.push(cursor.value);
+                    }
+                    count++;
+                    cursor.continue();
+                } else {
+                    resolve(articles);
+                }
             };
 
-            const transaction = this.db.transaction(['storage_meta'], 'readwrite');
-            const store = transaction.objectStore('storage_meta');
-
-            await new Promise((resolve, reject) => {
-                const request = store.put(metadata);
-                request.onsuccess = () => resolve();
-                request.onerror = () => reject(request.error);
-            });
-
-            return true;
-        } catch (error) {
-            console.error('Failed to update storage metadata:', error);
-            return false;
-        }
+            request.onerror = (event) => {
+                console.error('Error getting offline articles:', event.target.error);
+                reject(event.target.error);
+            };
+        });
     }
 
-    /**
-     * Clear all offline data
-     */
+    async searchArticles(query, filters = {}) {
+        if (!this.db) return [];
+
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction(['articles'], 'readonly');
+            const store = transaction.objectStore('articles');
+            const articles = [];
+
+            const request = store.openCursor();
+
+            request.onsuccess = (event) => {
+                const cursor = event.target.result;
+
+                if (cursor) {
+                    const article = cursor.value;
+                    let matches = true;
+
+                    // Search in title and description
+                    if (query) {
+                        const searchQuery = query.toLowerCase();
+                        matches = (
+                            (article.title && article.title.toLowerCase().includes(searchQuery)) ||
+                            (article.description && article.description.toLowerCase().includes(searchQuery))
+                        );
+                    }
+
+                    // Apply filters
+                    if (matches && filters.category) {
+                        matches = article.category &&
+                            article.category.some &&
+                            article.category.some(cat =>
+                                cat.toLowerCase() === filters.category.toLowerCase()
+                            );
+                    }
+
+                    if (matches) {
+                        articles.push(article);
+                    }
+
+                    cursor.continue();
+                } else {
+                    resolve(articles);
+                }
+            };
+
+            request.onerror = (event) => {
+                console.error('Error searching articles:', event.target.error);
+                reject(event.target.error);
+            };
+        });
+    }
+
+    async updateReadingProgress(articleId, progress) {
+        if (!this.db) return false;
+
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction(['progress'], 'readwrite');
+            const store = transaction.objectStore('progress');
+
+            const progressData = {
+                articleId: articleId,
+                progress: progress,
+                lastRead: new Date().toISOString()
+            };
+
+            const request = store.put(progressData);
+
+            request.onsuccess = () => {
+                // Also mark article as read if progress > 90%
+                if (progress > 90) {
+                    this.markArticleAsRead(articleId);
+                }
+                resolve(true);
+            };
+
+            request.onerror = (event) => {
+                console.error('Error updating progress:', event.target.error);
+                reject(event.target.error);
+            };
+        });
+    }
+
+    async markArticleAsRead(articleId) {
+        if (!this.db) return false;
+
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction(['articles'], 'readwrite');
+            const store = transaction.objectStore('articles');
+
+            const getRequest = store.get(articleId);
+
+            getRequest.onsuccess = () => {
+                const article = getRequest.result;
+                if (article) {
+                    article.read = true;
+                    article.lastRead = new Date().toISOString();
+
+                    const updateRequest = store.put(article);
+
+                    updateRequest.onsuccess = () => {
+                        resolve(true);
+                    };
+
+                    updateRequest.onerror = (event) => {
+                        console.error('Error marking article as read:', event.target.error);
+                        reject(event.target.error);
+                    };
+                } else {
+                    resolve(false);
+                }
+            };
+
+            getRequest.onerror = (event) => {
+                console.error('Error getting article:', event.target.error);
+                reject(event.target.error);
+            };
+        });
+    }
+
+    async toggleBookmark(article) {
+        if (!this.db) return false;
+
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction(['bookmarks'], 'readwrite');
+            const store = transaction.objectStore('bookmarks');
+
+            const getRequest = store.get(article.id);
+
+            getRequest.onsuccess = () => {
+                if (getRequest.result) {
+                    // Remove bookmark
+                    const deleteRequest = store.delete(article.id);
+
+                    deleteRequest.onsuccess = () => {
+                        resolve({ bookmarked: false });
+                    };
+
+                    deleteRequest.onerror = (event) => {
+                        console.error('Error removing bookmark:', event.target.error);
+                        reject(event.target.error);
+                    };
+                } else {
+                    // Add bookmark
+                    const bookmark = {
+                        ...article,
+                        dateAdded: new Date().toISOString()
+                    };
+
+                    const addRequest = store.put(bookmark);
+
+                    addRequest.onsuccess = () => {
+                        resolve({ bookmarked: true });
+                    };
+
+                    addRequest.onerror = (event) => {
+                        console.error('Error adding bookmark:', event.target.error);
+                        reject(event.target.error);
+                    };
+                }
+            };
+
+            getRequest.onerror = (event) => {
+                console.error('Error checking bookmark:', event.target.error);
+                reject(event.target.error);
+            };
+        });
+    }
+
+    async isArticleBookmarked(articleId) {
+        if (!this.db) return false;
+
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction(['bookmarks'], 'readonly');
+            const store = transaction.objectStore('bookmarks');
+            const request = store.get(articleId);
+
+            request.onsuccess = () => {
+                resolve(!!request.result);
+            };
+
+            request.onerror = (event) => {
+                console.error('Error checking bookmark:', event.target.error);
+                reject(event.target.error);
+            };
+        });
+    }
+
+    async getBookmarkedArticles() {
+        if (!this.db) return [];
+
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction(['bookmarks'], 'readonly');
+            const store = transaction.objectStore('bookmarks');
+            const articles = [];
+
+            const request = store.openCursor();
+
+            request.onsuccess = (event) => {
+                const cursor = event.target.result;
+
+                if (cursor) {
+                    articles.push(cursor.value);
+                    cursor.continue();
+                } else {
+                    resolve(articles);
+                }
+            };
+
+            request.onerror = (event) => {
+                console.error('Error getting bookmarks:', event.target.error);
+                reject(event.target.error);
+            };
+        });
+    }
+
+    async cleanupOldArticles() {
+        if (!this.db) return;
+
+        const cutoffDate = new Date();
+        cutoffDate.setDate(cutoffDate.getDate() - this.maxStorageDays);
+
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction(['articles'], 'readwrite');
+            const store = transaction.objectStore('articles');
+            const index = store.index('savedDate');
+            const range = IDBKeyRange.upperBound(cutoffDate.toISOString());
+            const articlesToDelete = [];
+
+            const request = index.openCursor(range);
+
+            request.onsuccess = (event) => {
+                const cursor = event.target.result;
+
+                if (cursor) {
+                    // Don't delete bookmarked articles
+                    if (!cursor.value.savedForOffline) {
+                        articlesToDelete.push(cursor.value.id);
+                    }
+                    cursor.continue();
+                } else {
+                    // Delete old articles
+                    articlesToDelete.forEach(id => {
+                        store.delete(id);
+                    });
+
+                    console.log(`Cleaned up ${articlesToDelete.length} old articles`);
+                    resolve(articlesToDelete.length);
+                }
+            };
+
+            request.onerror = (event) => {
+                console.error('Error cleaning up articles:', event.target.error);
+                reject(event.target.error);
+            };
+        });
+    }
+
+    async getStorageStats() {
+        if (!this.db) return null;
+
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction(['articles', 'bookmarks', 'progress'], 'readonly');
+            const articlesStore = transaction.objectStore('articles');
+            const bookmarksStore = transaction.objectStore('bookmarks');
+            const progressStore = transaction.objectStore('progress');
+
+            let articlesCount = 0;
+            let bookmarksCount = 0;
+            let progressCount = 0;
+            let offlineCount = 0;
+            let readCount = 0;
+
+            const articlesRequest = articlesStore.count();
+            articlesRequest.onsuccess = () => {
+                articlesCount = articlesRequest.result;
+            };
+
+            const bookmarksRequest = bookmarksStore.count();
+            bookmarksRequest.onsuccess = () => {
+                bookmarksCount = bookmarksRequest.result;
+            };
+
+            const progressRequest = progressStore.count();
+            progressRequest.onsuccess = () => {
+                progressCount = progressRequest.result;
+            };
+
+            const offlineRequest = articlesStore.index('savedForOffline').count(IDBKeyRange.only(true));
+            offlineRequest.onsuccess = () => {
+                offlineCount = offlineRequest.result;
+            };
+
+            const readRequest = articlesStore.index('read').count(IDBKeyRange.only(true));
+            readRequest.onsuccess = () => {
+                readCount = readRequest.result;
+            };
+
+            transaction.oncomplete = () => {
+                resolve({
+                    totalArticles: articlesCount,
+                    bookmarkedArticles: bookmarksCount,
+                    offlineArticles: offlineCount,
+                    readArticles: readCount,
+                    articlesWithProgress: progressCount
+                });
+            };
+
+            transaction.onerror = (event) => {
+                reject(event.target.error);
+            };
+        });
+    }
+
+    async queueOfflineAction(action) {
+        if (!this.db) return false;
+
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction(['actions'], 'readwrite');
+            const store = transaction.objectStore('actions');
+
+            const actionData = {
+                ...action,
+                timestamp: new Date().toISOString(),
+                status: 'pending'
+            };
+
+            const request = store.add(actionData);
+
+            request.onsuccess = () => {
+                console.log('Action queued:', action.type);
+                resolve(request.result);
+            };
+
+            request.onerror = (event) => {
+                console.error('Error queuing action:', event.target.error);
+                reject(event.target.error);
+            };
+        });
+    }
+
+    async getPendingActions() {
+        if (!this.db) return [];
+
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction(['actions'], 'readonly');
+            const store = transaction.objectStore('actions');
+            const index = store.index('status');
+            const range = IDBKeyRange.only('pending');
+            const actions = [];
+
+            const request = index.openCursor(range);
+
+            request.onsuccess = (event) => {
+                const cursor = event.target.result;
+
+                if (cursor) {
+                    actions.push(cursor.value);
+                    cursor.continue();
+                } else {
+                    resolve(actions);
+                }
+            };
+
+            request.onerror = (event) => {
+                console.error('Error getting pending actions:', event.target.error);
+                reject(event.target.error);
+            };
+        });
+    }
+
+    async updateActionStatus(actionId, status) {
+        if (!this.db) return false;
+
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction(['actions'], 'readwrite');
+            const store = transaction.objectStore('actions');
+
+            const getRequest = store.get(actionId);
+
+            getRequest.onsuccess = () => {
+                const action = getRequest.result;
+                if (action) {
+                    action.status = status;
+
+                    const updateRequest = store.put(action);
+
+                    updateRequest.onsuccess = () => {
+                        resolve(true);
+                    };
+
+                    updateRequest.onerror = (event) => {
+                        console.error('Error updating action:', event.target.error);
+                        reject(event.target.error);
+                    };
+                } else {
+                    resolve(false);
+                }
+            };
+
+            getRequest.onerror = (event) => {
+                console.error('Error getting action:', event.target.error);
+                reject(event.target.error);
+            };
+        });
+    }
+
+    async getSetting(key, defaultValue = null) {
+        if (!this.db) return defaultValue;
+
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction(['settings'], 'readonly');
+            const store = transaction.objectStore('settings');
+            const request = store.get(key);
+
+            request.onsuccess = () => {
+                resolve(request.result ? request.result.value : defaultValue);
+            };
+
+            request.onerror = (event) => {
+                console.error('Error getting setting:', event.target.error);
+                reject(event.target.error);
+            };
+        });
+    }
+
+    async setSetting(key, value) {
+        if (!this.db) return false;
+
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction(['settings'], 'readwrite');
+            const store = transaction.objectStore('settings');
+
+            const setting = {
+                key: key,
+                value: value,
+                updated: new Date().toISOString()
+            };
+
+            const request = store.put(setting);
+
+            request.onsuccess = () => {
+                resolve(true);
+            };
+
+            request.onerror = (event) => {
+                console.error('Error saving setting:', event.target.error);
+                reject(event.target.error);
+            };
+        });
+    }
+
+    async estimateStorageUsage() {
+        if (!this.db) return { usage: 0, quota: 0, percentage: 0 };
+
+        return new Promise((resolve) => {
+            if ('storage' in navigator && 'estimate' in navigator.storage) {
+                navigator.storage.estimate().then((estimate) => {
+                    resolve({
+                        usage: estimate.usage || 0,
+                        quota: estimate.quota || 0,
+                        percentage: estimate.quota ? (estimate.usage / estimate.quota) * 100 : 0
+                    });
+                }).catch(() => {
+                    resolve({ usage: 0, quota: 0, percentage: 0 });
+                });
+            } else {
+                resolve({ usage: 0, quota: 0, percentage: 0 });
+            }
+        });
+    }
+
     async clearAllData() {
         if (!this.db) return false;
 
-        try {
-            const stores = ['articles', 'bookmarks', 'reading_progress', 'action_queue', 'search_index'];
-
-            const transaction = this.db.transaction(stores, 'readwrite');
-
-            await Promise.all(
-                stores.map(storeName => {
-                    const store = transaction.objectStore(storeName);
-                    return new Promise((resolve, reject) => {
-                        const request = store.clear();
-                        request.onsuccess = () => resolve();
-                        request.onerror = () => reject(request.error);
-                    });
-                })
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction(
+                ['articles', 'bookmarks', 'progress', 'actions', 'settings'],
+                'readwrite'
             );
 
-            await this.updateStorageMetadata();
-            return true;
-        } catch (error) {
-            console.error('Failed to clear all data:', error);
-            return false;
-        }
-    }
-}
+            transaction.objectStore('articles').clear();
+            transaction.objectStore('bookmarks').clear();
+            transaction.objectStore('progress').clear();
+            transaction.objectStore('actions').clear();
+            transaction.objectStore('settings').clear();
 
-// Export for use in other modules
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = OfflineStorage;
-} else {
-    window.OfflineStorage = OfflineStorage;
+            transaction.oncomplete = () => {
+                console.log('All IndexedDB data cleared');
+                resolve(true);
+            };
+
+            transaction.onerror = (event) => {
+                console.error('Error clearing data:', event.target.error);
+                reject(event.target.error);
+            };
+        });
+    }
+
+    async clearOldArticles(olderThanDays = 7) {
+        if (!this.db) return 0;
+
+        const cutoffDate = new Date();
+        cutoffDate.setDate(cutoffDate.getDate() - olderThanDays);
+        let deletedCount = 0;
+
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction(['articles'], 'readwrite');
+            const store = transaction.objectStore('articles');
+            const index = store.index('savedDate');
+            const range = IDBKeyRange.upperBound(cutoffDate.toISOString());
+
+            const request = index.openCursor(range);
+
+            request.onsuccess = (event) => {
+                const cursor = event.target.result;
+
+                if (cursor) {
+                    // Don't delete bookmarked or saved for offline articles
+                    if (!cursor.value.savedForOffline) {
+                        const bookmarkCheck = this.isArticleBookmarked(cursor.value.id);
+                        bookmarkCheck.then((bookmarked) => {
+                            if (!bookmarked) {
+                                cursor.delete();
+                                deletedCount++;
+                            }
+                        });
+                    }
+                    cursor.continue();
+                } else {
+                    resolve(deletedCount);
+                }
+            };
+
+            request.onerror = (event) => {
+                console.error('Error clearing old articles:', event.target.error);
+                reject(event.target.error);
+            };
+        });
+    }
 }

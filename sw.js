@@ -1,58 +1,83 @@
-// sw.js - Service Worker for Offline News App
+// service-worker.js - Enhanced Service Worker
+const CACHE_VERSION = 'v2.0';
+const STATIC_CACHE = `static-${CACHE_VERSION}`;
+const API_CACHE = `api-${CACHE_VERSION}`;
+const IMAGE_CACHE = `images-${CACHE_VERSION}`;
 
-const CACHE_NAME = 'currents-news-v1.0';
 const OFFLINE_URL = 'offline.html';
 
-// Files to cache immediately on install
-const STATIC_CACHE_URLS = [
+// Static assets to cache on install
+const STATIC_ASSETS = [
     '/',
     '/index.html',
-    '/style.css',
+    '/styles.css',
     '/script.js',
+    '/offline-storage.js',
+    '/cache-controller.js',
+    '/offline-manager.js',
     '/manifest.json',
+    '/offline.html',
     'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
     'https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Roboto:wght@300;400;500&display=swap'
 ];
 
-// Install event - cache static assets
+// Install event
 self.addEventListener('install', event => {
-    console.log('Service Worker: Installing...');
+    console.log('[Service Worker] Installing...');
 
     event.waitUntil(
-        caches.open(CACHE_NAME)
-        .then(cache => {
-            console.log('Service Worker: Caching static assets');
-            return cache.addAll(STATIC_CACHE_URLS);
-        })
+        Promise.all([
+            // Cache static assets
+            caches.open(STATIC_CACHE)
+            .then(cache => cache.addAll(STATIC_ASSETS)),
+
+            // Skip waiting to activate immediately
+            self.skipWaiting()
+        ])
         .then(() => {
-            console.log('Service Worker: Installation complete');
-            return self.skipWaiting();
+            console.log('[Service Worker] Installation complete');
         })
     );
 });
 
-// Activate event - clean up old caches
+// Activate event
 self.addEventListener('activate', event => {
-    console.log('Service Worker: Activating...');
+    console.log('[Service Worker] Activating...');
 
     event.waitUntil(
-        caches.keys().then(cacheNames => {
-            return Promise.all(
-                cacheNames.map(cacheName => {
-                    if (cacheName !== CACHE_NAME) {
-                        console.log('Service Worker: Clearing old cache:', cacheName);
-                        return caches.delete(cacheName);
-                    }
-                })
-            );
-        }).then(() => {
-            console.log('Service Worker: Activation complete');
-            return self.clients.claim();
+        Promise.all([
+            // Clean up old caches
+            caches.keys().then(cacheNames => {
+                return Promise.all(
+                    cacheNames.map(cacheName => {
+                        if (![STATIC_CACHE, API_CACHE, IMAGE_CACHE].includes(cacheName)) {
+                            console.log('[Service Worker] Deleting old cache:', cacheName);
+                            return caches.delete(cacheName);
+                        }
+                    })
+                );
+            }),
+
+            // Claim clients
+            self.clients.claim()
+        ])
+        .then(() => {
+            console.log('[Service Worker] Activation complete');
+
+            // Send message to all clients
+            self.clients.matchAll().then(clients => {
+                clients.forEach(client => {
+                    client.postMessage({
+                        type: 'SW_ACTIVATED',
+                        version: CACHE_VERSION
+                    });
+                });
+            });
         })
     );
 });
 
-// Fetch event - serve from cache if offline
+// Fetch event with enhanced strategies
 self.addEventListener('fetch', event => {
     const { request } = event;
     const url = new URL(request.url);
@@ -62,292 +87,354 @@ self.addEventListener('fetch', event => {
         return;
     }
 
-    // Handle API requests differently
+    // Handle different types of requests with different strategies
     if (url.hostname === 'api.currentsapi.services') {
-        event.respondWith(handleApiRequest(event));
-        return;
+        event.respondWith(apiFirstStrategy(event));
+    } else if (isImageRequest(request)) {
+        event.respondWith(imageStrategy(event));
+    } else if (isStaticAsset(request)) {
+        event.respondWith(cacheFirstStrategy(event));
+    } else {
+        event.respondWith(networkFirstStrategy(event));
     }
-
-    // Handle navigation requests for GitHub Pages PWA routing
-    if (request.mode === 'navigate') {
-        event.respondWith(handleNavigationRequest(event));
-        return;
-    }
-
-    // For all other requests, try cache first with network fallback
-    event.respondWith(
-        caches.match(request)
-        .then(response => {
-            // Return cached response if found
-            if (response) {
-                console.log('Service Worker: Serving from cache:', request.url);
-                return response;
-            }
-
-            // Otherwise fetch from network
-            return fetch(request)
-                .then(networkResponse => {
-                    // Don't cache non-successful responses
-                    if (!networkResponse || networkResponse.status !== 200) {
-                        return networkResponse;
-                    }
-
-                    // Cache successful responses (except API calls)
-                    if (!url.hostname.includes('api.')) {
-                        const responseToCache = networkResponse.clone();
-                        caches.open(CACHE_NAME)
-                            .then(cache => {
-                                cache.put(request, responseToCache);
-                                console.log('Service Worker: Cached new resource:', request.url);
-                            });
-                    }
-
-                    return networkResponse;
-                })
-                .catch(() => {
-                    // If both cache and network fail, show offline page for navigation requests
-                    if (request.mode === 'navigate') {
-                        return caches.match(OFFLINE_URL);
-                    }
-                    return new Response('Offline - content not available', {
-                        status: 503,
-                        statusText: 'Service Unavailable',
-                        headers: new Headers({ 'Content-Type': 'text/plain' })
-                    });
-                });
-        })
-    );
 });
 
-// Special handling for API requests
-function handleApiRequest(event) {
+// API-first strategy: Try network first, then cache
+async function apiFirstStrategy(event) {
     const { request } = event;
-    const url = new URL(request.url);
+    const cache = await caches.open(API_CACHE);
 
-    return caches.match(request)
-        .then(cachedResponse => {
-            // If we have cached API data, return it immediately
-            if (cachedResponse) {
-                console.log('Service Worker: Serving cached API data:', url.pathname);
-                return cachedResponse;
-            }
+    try {
+        // Try network first
+        const networkResponse = await fetch(request);
 
-            // Try network for API calls
-            return fetch(request)
-                .then(networkResponse => {
-                    // Cache successful API responses for offline use
-                    if (networkResponse && networkResponse.status === 200) {
-                        const responseToCache = networkResponse.clone();
+        if (networkResponse.ok) {
+            // Cache the successful response
+            const responseToCache = networkResponse.clone();
+            cache.put(request, responseToCache);
+            console.log('[Service Worker] API cached:', request.url);
+            return networkResponse;
+        }
 
-                        // Only cache certain API endpoints
-                        if (shouldCacheApiRequest(url)) {
-                            caches.open(CACHE_NAME)
-                                .then(cache => {
-                                    cache.put(request, responseToCache);
-                                    console.log('Service Worker: Cached API response:', url.pathname);
-                                });
-                        }
-                    }
+        throw new Error('Network response not ok');
+    } catch (error) {
+        console.log('[Service Worker] Network failed, trying cache:', request.url);
 
-                    return networkResponse;
-                })
-                .catch(error => {
-                    console.log('Service Worker: API request failed:', error);
+        // Try cache
+        const cachedResponse = await cache.match(request);
+        if (cachedResponse) {
+            console.log('[Service Worker] Serving cached API:', request.url);
+            return cachedResponse;
+        }
 
-                    // For search/latest-news endpoints, return previously cached data if available
-                    if (url.pathname.includes('/latest-news') || url.pathname.includes('/search')) {
-                        return getCachedNewsFallback();
-                    }
-
-                    return new Response(JSON.stringify({
-                        status: 'error',
-                        message: 'You are offline. Please connect to the internet to fetch latest news.'
-                    }), {
-                        status: 503,
-                        headers: { 'Content-Type': 'application/json' }
-                    });
-                });
+        // No cache available, return error
+        return new Response(JSON.stringify({
+            status: 'error',
+            message: 'You are offline and no cached data available.'
+        }), {
+            status: 503,
+            headers: { 'Content-Type': 'application/json' }
         });
+    }
 }
 
-// Handle navigation requests (for GitHub Pages PWA routing)
-function handleNavigationRequest(event) {
+// Image strategy: Cache first, then network
+async function imageStrategy(event) {
     const { request } = event;
+    const cache = await caches.open(IMAGE_CACHE);
 
-    return caches.match('index.html')
-        .then(response => {
-            if (response) {
-                console.log('Service Worker: Serving app shell for navigation:', request.url);
-                return response;
-            }
-
-            // Fallback to network if cache miss
-            return fetch(request);
-        })
-        .catch(error => {
-            console.log('Service Worker: Navigation request failed:', error);
-            // Return offline page for navigation requests
-            return caches.match('offline.html')
-                .then(offlineResponse => {
-                    if (offlineResponse) {
-                        return offlineResponse;
-                    }
-                    return new Response('Offline - navigation not available', {
-                        status: 503,
-                        statusText: 'Service Unavailable'
-                    });
-                });
-        });
-}
-
-// Check if API request should be cached
-function shouldCacheApiRequest(url) {
-    const path = url.pathname;
-
-    // Cache these API endpoints
-    if (path.includes('/latest-news') || path.includes('/search')) {
-        const params = new URLSearchParams(url.search);
-
-        // Don't cache searches with specific filters (they might be unique)
-        if (params.has('keywords') && params.get('keywords').length > 0) {
-            return false;
-        }
-
-        // Cache category-based requests
-        if (params.has('category')) {
-            return true;
-        }
-
-        // Cache language-based latest news
-        if (path.includes('/latest-news') && params.has('language')) {
-            return true;
-        }
+    // Try cache first
+    const cachedResponse = await cache.match(request);
+    if (cachedResponse) {
+        console.log('[Service Worker] Serving cached image:', request.url);
+        return cachedResponse;
     }
 
-    return false;
-}
+    try {
+        // Try network
+        const networkResponse = await fetch(request);
 
-// Get cached news as fallback
-function getCachedNewsFallback() {
-    return caches.open(CACHE_NAME)
-        .then(cache => {
-            return cache.keys()
-                .then(requests => {
-                    // Find cached API responses
-                    const apiRequests = requests.filter(req => {
-                        const reqUrl = new URL(req.url);
-                        return reqUrl.hostname === 'api.currentsapi.services' &&
-                            (reqUrl.pathname.includes('/latest-news') || reqUrl.pathname.includes('/search'));
-                    });
+        if (networkResponse.ok) {
+            // Cache the image for future use
+            const responseToCache = networkResponse.clone();
+            cache.put(request, responseToCache);
+            console.log('[Service Worker] Image cached:', request.url);
+        }
 
-                    if (apiRequests.length === 0) {
-                        throw new Error('No cached news available');
-                    }
+        return networkResponse;
+    } catch (error) {
+        console.log('[Service Worker] Image fetch failed:', request.url);
 
-                    // Get the most recent cached response
-                    return cache.match(apiRequests[apiRequests.length - 1]);
-                });
-        })
-        .then(response => {
-            if (response) {
-                return response;
+        // Return a placeholder image or error
+        return new Response(
+            `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300">
+                <rect width="400" height="300" fill="#f3f4f6"/>
+                <text x="200" y="150" text-anchor="middle" font-family="Arial" font-size="16" fill="#6b7280">
+                    Image not available offline
+                </text>
+            </svg>`, {
+                headers: { 'Content-Type': 'image/svg+xml' }
             }
-            throw new Error('No cached news available');
-        })
-        .catch(() => {
-            return new Response(JSON.stringify({
-                status: 'ok',
-                news: [],
-                message: 'You are offline. No cached articles available.'
-            }), {
-                status: 200,
-                headers: { 'Content-Type': 'application/json' }
-            });
-        });
+        );
+    }
 }
 
-// Background sync for offline article reading
+// Cache-first strategy for static assets
+async function cacheFirstStrategy(event) {
+    const { request } = event;
+    const cache = await caches.open(STATIC_CACHE);
+
+    // Try cache first
+    const cachedResponse = await cache.match(request);
+    if (cachedResponse) {
+        console.log('[Service Worker] Serving cached static:', request.url);
+        return cachedResponse;
+    }
+
+    // Try network
+    try {
+        const networkResponse = await fetch(request);
+
+        if (networkResponse.ok) {
+            // Don't cache non-static assets
+            if (isStaticAsset(request)) {
+                const responseToCache = networkResponse.clone();
+                cache.put(request, responseToCache);
+            }
+        }
+
+        return networkResponse;
+    } catch (error) {
+        console.log('[Service Worker] Static asset fetch failed:', request.url);
+
+        // If it's a navigation request, show offline page
+        if (request.mode === 'navigate') {
+            return caches.match(OFFLINE_URL);
+        }
+
+        return new Response('Offline - content not available', {
+            status: 503,
+            statusText: 'Service Unavailable'
+        });
+    }
+}
+
+// Network-first strategy for other requests
+async function networkFirstStrategy(event) {
+    const { request } = event;
+
+    try {
+        // Try network first
+        const networkResponse = await fetch(request);
+
+        if (networkResponse.ok) {
+            // Cache successful responses
+            const cache = await caches.open(STATIC_CACHE);
+            const responseToCache = networkResponse.clone();
+            cache.put(request, responseToCache);
+        }
+
+        return networkResponse;
+    } catch (error) {
+        console.log('[Service Worker] Network failed, trying cache:', request.url);
+
+        // Try cache
+        const cache = await caches.open(STATIC_CACHE);
+        const cachedResponse = await cache.match(request);
+
+        if (cachedResponse) {
+            return cachedResponse;
+        }
+
+        // If it's a navigation request, show offline page
+        if (request.mode === 'navigate') {
+            return caches.match(OFFLINE_URL);
+        }
+
+        return new Response('Offline - content not available', {
+            status: 503,
+            statusText: 'Service Unavailable'
+        });
+    }
+}
+
+// Helper functions
+function isImageRequest(request) {
+    const url = new URL(request.url);
+    return /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(url.pathname) ||
+        url.hostname.includes('unsplash.com') ||
+        url.hostname.includes('images.unsplash.com');
+}
+
+function isStaticAsset(request) {
+    const url = new URL(request.url);
+    return url.origin === self.location.origin ||
+        url.hostname === 'cdnjs.cloudflare.com' ||
+        url.hostname === 'fonts.googleapis.com' ||
+        url.hostname === 'fonts.gstatic.com';
+}
+
+// Background sync
 self.addEventListener('sync', event => {
     if (event.tag === 'sync-news') {
-        console.log('Service Worker: Background sync triggered');
-        event.waitUntil(syncNewsData());
+        console.log('[Service Worker] Background sync triggered');
+
+        event.waitUntil(
+            syncNewsData()
+            .then(() => {
+                console.log('[Service Worker] Background sync completed');
+
+                // Notify clients
+                self.clients.matchAll().then(clients => {
+                    clients.forEach(client => {
+                        client.postMessage({
+                            type: 'BACKGROUND_SYNC_COMPLETED'
+                        });
+                    });
+                });
+            })
+            .catch(error => {
+                console.error('[Service Worker] Background sync failed:', error);
+            })
+        );
     }
 });
 
-// Sync news when back online
-function syncNewsData() {
-    return caches.open(CACHE_NAME)
-        .then(cache => {
-            return cache.keys()
-                .then(requests => {
-                    const apiRequests = requests.filter(req => {
-                        const url = new URL(req.url);
-                        return url.hostname === 'api.currentsapi.services';
-                    });
+// Periodic sync (if supported)
+self.addEventListener('periodicsync', event => {
+    if (event.tag === 'news-update') {
+        console.log('[Service Worker] Periodic sync triggered');
 
-                    // Re-fetch cached API requests to update data
-                    const updatePromises = apiRequests.map(request => {
-                        return fetch(request)
-                            .then(response => {
-                                if (response.ok) {
-                                    const responseToCache = response.clone();
-                                    return cache.put(request, responseToCache);
-                                }
-                            })
-                            .catch(error => {
-                                console.log('Failed to update:', request.url, error);
-                            });
-                    });
+        event.waitUntil(
+            updateNewsCache()
+            .then(() => {
+                console.log('[Service Worker] Periodic sync completed');
+            })
+            .catch(error => {
+                console.error('[Service Worker] Periodic sync failed:', error);
+            })
+        );
+    }
+});
 
-                    return Promise.all(updatePromises);
-                });
-        });
-}
-
-// Push notifications (optional)
+// Push notifications
 self.addEventListener('push', event => {
+    console.log('[Service Worker] Push notification received');
+
     const options = {
         body: event.data ? event.data.text() : 'New news articles available!',
-        icon: '/icon-192.png',
-        badge: '/badge-72.png',
+        icon: 'https://img.icons8.com/color/96/000000/news.png',
+        badge: 'https://img.icons8.com/color/72/000000/news.png',
         vibrate: [100, 50, 100],
         data: {
-            dateOfArrival: Date.now(),
-            primaryKey: 1
+            url: '/',
+            timestamp: Date.now()
         },
         actions: [{
-                action: 'explore',
+                action: 'read',
                 title: 'Read Now',
-                icon: '/icon-192.png'
+                icon: 'https://img.icons8.com/color/96/000000/news.png'
             },
             {
-                action: 'close',
-                title: 'Close',
-                icon: '/icon-192.png'
+                action: 'dismiss',
+                title: 'Dismiss',
+                icon: 'https://img.icons8.com/color/96/000000/close.png'
             }
         ]
     };
 
     event.waitUntil(
-        self.registration.showNotification('Currents News Update', options)
+        self.registration.showNotification('Currents News', options)
     );
 });
 
 self.addEventListener('notificationclick', event => {
-    console.log('Notification click received:', event.notification);
+    console.log('[Service Worker] Notification click:', event.notification);
     event.notification.close();
 
-    event.waitUntil(
-        clients.matchAll({ type: 'window', includeUncontrolled: true })
-        .then(windowClients => {
-            for (const client of windowClients) {
-                if (client.url.includes('/') && 'focus' in client) {
-                    return client.focus();
+    if (event.action === 'read') {
+        event.waitUntil(
+            clients.openWindow('/')
+        );
+    } else if (event.action === 'dismiss') {
+        // Do nothing
+    } else {
+        // Default action - open the app
+        event.waitUntil(
+            clients.matchAll({ type: 'window', includeUncontrolled: true })
+            .then(windowClients => {
+                for (const client of windowClients) {
+                    if (client.url.includes('/') && 'focus' in client) {
+                        return client.focus();
+                    }
                 }
-            }
-            if (clients.openWindow) {
-                return clients.openWindow('/');
-            }
-        })
-    );
+                if (clients.openWindow) {
+                    return clients.openWindow('/');
+                }
+            })
+        );
+    }
 });
+
+// Message handler
+self.addEventListener('message', event => {
+    const { data } = event;
+
+    switch (data.type) {
+        case 'SKIP_WAITING':
+            self.skipWaiting();
+            break;
+
+        case 'UPDATE_CACHE':
+            updateNewsCache();
+            break;
+
+        case 'CLEAR_CACHE':
+            clearOldCache();
+            break;
+    }
+});
+
+// Cache update functions
+async function syncNewsData() {
+    // This would sync offline actions with the server
+    // For now, just update the cache
+    return updateNewsCache();
+}
+
+async function updateNewsCache() {
+    console.log('[Service Worker] Updating news cache...');
+
+    // This would fetch latest news and update cache
+    // For now, just clean old cache
+    return cleanOldCache();
+}
+
+async function cleanOldCache() {
+    const cache = await caches.open(API_CACHE);
+    const requests = await cache.keys();
+    const oneHourAgo = Date.now() - (60 * 60 * 1000);
+
+    for (const request of requests) {
+        const response = await cache.match(request);
+        if (response) {
+            const cachedTime = response.headers.get('sw-cached-timestamp');
+            if (cachedTime && parseInt(cachedTime) < oneHourAgo) {
+                await cache.delete(request);
+                console.log('[Service Worker] Deleted old cache:', request.url);
+            }
+        }
+    }
+}
+
+async function clearOldCache() {
+    const cacheNames = await caches.keys();
+
+    for (const cacheName of cacheNames) {
+        if (cacheName.startsWith('currents-') &&
+            !cacheName.includes(CACHE_VERSION)) {
+            await caches.delete(cacheName);
+            console.log('[Service Worker] Deleted old cache:', cacheName);
+        }
+    }
+}

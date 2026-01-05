@@ -1,252 +1,313 @@
-/**
- * CacheController Module
- * Enhanced service worker management with multiple cache strategies
- */
-
+// cache-controller.js - Service Worker and Cache Management
 class CacheController {
     constructor() {
-        this.cacheName = 'veritas-news-v2.0';
-        this.staticCacheName = 'veritas-static-v2.0';
-        this.imagesCacheName = 'veritas-images-v2.0';
-        this.apiCacheName = 'veritas-api-v2.0';
+        this.CACHE_NAME = 'currents-news-v2.0';
+        this.API_CACHE_NAME = 'currents-api-v2.0';
+        this.IMAGE_CACHE_NAME = 'currents-images-v2.0';
+
+        this.cacheExpirations = {
+            static: 60 * 60 * 24 * 30, // 30 days
+            api: 60 * 60 * 2, // 2 hours
+            images: 60 * 60 * 24 * 7 // 7 days
+        };
 
         this.isServiceWorkerSupported = 'serviceWorker' in navigator;
         this.registration = null;
-
-        if (this.isServiceWorkerSupported) {
-            this.init();
-        }
     }
 
-    /**
-     * Initialize service worker registration
-     */
     async init() {
+        if (!this.isServiceWorkerSupported) {
+            console.warn('Service Worker not supported');
+            return false;
+        }
+
         try {
-            this.registration = await navigator.serviceWorker.register('/sw-enhanced.js', {
-                scope: '/'
+            // Register service worker
+            this.registration = await navigator.serviceWorker.register('service-worker.js', {
+                scope: '/',
+                updateViaCache: 'none'
             });
 
-            console.log('Service Worker registered successfully:', this.registration.scope);
-
-            // Set up message handling
-            this.setupMessageHandling();
+            console.log('Service Worker registered:', this.registration);
 
             // Check for updates
-            this.checkForUpdates();
+            if (this.registration.waiting) {
+                this.showUpdateNotification();
+            }
 
+            // Listen for updates
+            this.registration.addEventListener('updatefound', () => {
+                const newWorker = this.registration.installing;
+                console.log('Service Worker update found:', newWorker.state);
+
+                newWorker.addEventListener('statechange', () => {
+                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                        this.showUpdateNotification();
+                    }
+                });
+            });
+
+            // Wait for service worker to be ready
+            await navigator.serviceWorker.ready;
+
+            // Initialize caches
+            await this.initCaches();
+
+            return true;
         } catch (error) {
             console.error('Service Worker registration failed:', error);
-        }
-    }
-
-    /**
-     * Set up message handling between main thread and service worker
-     */
-    setupMessageHandling() {
-        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-            navigator.serviceWorker.addEventListener('message', (event) => {
-                const { type, data } = event.data;
-
-                switch (type) {
-                    case 'CACHE_UPDATED':
-                        console.log('Cache updated:', data);
-                        break;
-                    case 'SYNC_COMPLETED':
-                        console.log('Background sync completed:', data);
-                        break;
-                    case 'PUSH_NOTIFICATION':
-                        this.handlePushNotification(data);
-                        break;
-                    case 'STORAGE_QUOTA_EXCEEDED':
-                        this.handleStorageQuotaExceeded(data);
-                        break;
-                }
-            });
-        }
-    }
-
-    /**
-     * Check for service worker updates
-     */
-    checkForUpdates() {
-        if (this.registration && this.registration.waiting) {
-            this.showUpdateNotification();
-        }
-
-        this.registration.addEventListener('updatefound', () => {
-            const newWorker = this.registration.installing;
-
-            newWorker.addEventListener('statechange', () => {
-                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                    this.showUpdateNotification();
-                }
-            });
-        });
-    }
-
-    /**
-     * Show update notification to user
-     */
-    showUpdateNotification() {
-        // Create a toast notification for update available
-        const container = document.getElementById('toast-container');
-        if (container) {
-            const toast = document.createElement('div');
-            toast.className = 'toast info';
-            toast.innerHTML = `
-                <div class="toast-icon">
-                    <i class="fas fa-download"></i>
-                </div>
-                <div class="toast-message">New version available! <button onclick="window.location.reload()" style="background:none;border:none;color:#2563eb;cursor:pointer;text-decoration:underline;">Refresh</button></div>
-                <button class="toast-close">
-                    <i class="fas fa-times"></i>
-                </button>
-            `;
-
-            container.appendChild(toast);
-
-            // Remove toast after 10 seconds
-            setTimeout(() => {
-                toast.remove();
-            }, 10000);
-
-            // Close button
-            toast.querySelector('.toast-close').addEventListener('click', () => {
-                toast.remove();
-            });
-        }
-    }
-
-    /**
-     * Cache static assets (cache-first strategy)
-     */
-    async cacheStaticAssets() {
-        if (!this.registration || !this.registration.active) {
             return false;
         }
+    }
+
+    async initCaches() {
+        try {
+            // Open or create caches
+            const cachePromises = [
+                caches.open(this.CACHE_NAME),
+                caches.open(this.API_CACHE_NAME),
+                caches.open(this.IMAGE_CACHE_NAME)
+            ];
+
+            await Promise.all(cachePromises);
+            console.log('Caches initialized');
+        } catch (error) {
+            console.error('Cache initialization failed:', error);
+        }
+    }
+
+    async cacheStaticAssets(assets) {
+        if (!this.isServiceWorkerSupported) return;
 
         try {
-            const message = {
-                type: 'CACHE_STATIC_ASSETS',
-                data: {
-                    cacheName: this.staticCacheName,
-                    assets: [
-                        '/',
-                        '/index.html',
-                        '/styles.css',
-                        '/script.js',
-                        '/offline-storage.js',
-                        '/cache-controller.js',
-                        '/offline-manager.js',
-                        '/manifest.json',
-                        '/404.html',
-                        '/offline.html',
-                        'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
-                        'https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Roboto:wght@300;400;500&display=swap'
-                    ]
-                }
-            };
-
-            await this.sendMessage(message);
-            return true;
+            const cache = await caches.open(this.CACHE_NAME);
+            await cache.addAll(assets);
+            console.log('Static assets cached');
         } catch (error) {
             console.error('Failed to cache static assets:', error);
-            return false;
         }
     }
 
-    /**
-     * Cache API responses (network-first strategy)
-     */
     async cacheApiResponse(url, response) {
-        if (!this.registration || !this.registration.active) {
-            return false;
-        }
+        if (!this.isServiceWorkerSupported) return;
 
         try {
-            const message = {
-                type: 'CACHE_API_RESPONSE',
-                data: {
-                    cacheName: this.apiCacheName,
-                    url: url,
-                    response: response,
-                    timestamp: Date.now()
-                }
-            };
+            const cache = await caches.open(this.API_CACHE_NAME);
 
-            await this.sendMessage(message);
-            return true;
+            // Add timestamp for expiration
+            const headers = new Headers(response.headers);
+            headers.append('sw-cached-timestamp', Date.now().toString());
+
+            const cachedResponse = new Response(response.body, {
+                status: response.status,
+                statusText: response.statusText,
+                headers: headers
+            });
+
+            await cache.put(url, cachedResponse);
+            console.log('API response cached:', url);
         } catch (error) {
             console.error('Failed to cache API response:', error);
-            return false;
         }
     }
 
-    /**
-     * Cache images (cache-first with expiration)
-     */
-    async cacheImage(url, imageData) {
-        if (!this.registration || !this.registration.active) {
-            return false;
-        }
+    async cacheImage(url, response) {
+        if (!this.isServiceWorkerSupported) return;
 
         try {
-            const message = {
-                type: 'CACHE_IMAGE',
-                data: {
-                    cacheName: this.imagesCacheName,
-                    url: url,
-                    imageData: imageData,
-                    timestamp: Date.now()
-                }
-            };
-
-            await this.sendMessage(message);
-            return true;
+            const cache = await caches.open(this.IMAGE_CACHE_NAME);
+            await cache.put(url, response);
+            console.log('Image cached:', url);
         } catch (error) {
             console.error('Failed to cache image:', error);
-            return false;
         }
     }
 
-    /**
-     * Get cached response
-     */
-    async getCachedResponse(url) {
-        if (!this.registration || !this.registration.active) {
-            return null;
-        }
+    async getCachedResponse(url, cacheName = null) {
+        if (!this.isServiceWorkerSupported) return null;
 
         try {
-            const message = {
-                type: 'GET_CACHED_RESPONSE',
-                data: { url: url }
-            };
+            let cacheToUse;
 
-            const response = await this.sendMessage(message);
-            return response;
+            if (cacheName) {
+                cacheToUse = await caches.open(cacheName);
+            } else {
+                // Determine which cache to use based on URL
+                if (url.includes('api.currentsapi.services')) {
+                    cacheToUse = await caches.open(this.API_CACHE_NAME);
+                } else if (this.isImageUrl(url)) {
+                    cacheToUse = await caches.open(this.IMAGE_CACHE_NAME);
+                } else {
+                    cacheToUse = await caches.open(this.CACHE_NAME);
+                }
+            }
+
+            const response = await cacheToUse.match(url);
+
+            if (response) {
+                // Check if cache has expired
+                const cachedTimestamp = response.headers.get('sw-cached-timestamp');
+                if (cachedTimestamp) {
+                    const cacheAge = Date.now() - parseInt(cachedTimestamp);
+                    const maxAge = this.getCacheMaxAge(url);
+
+                    if (cacheAge > maxAge * 1000) {
+                        // Cache expired, delete it
+                        await cacheToUse.delete(url);
+                        return null;
+                    }
+                }
+
+                return response;
+            }
+
+            return null;
         } catch (error) {
             console.error('Failed to get cached response:', error);
             return null;
         }
     }
 
-    /**
-     * Clear specific cache
-     */
-    async clearCache(cacheType = 'all') {
-        if (!this.registration || !this.registration.active) {
-            return false;
+    getCacheMaxAge(url) {
+        if (url.includes('api.currentsapi.services')) {
+            return this.cacheExpirations.api;
+        } else if (this.isImageUrl(url)) {
+            return this.cacheExpirations.images;
+        } else {
+            return this.cacheExpirations.static;
+        }
+    }
+
+    isImageUrl(url) {
+        return /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(url) ||
+            url.includes('unsplash.com') ||
+            url.includes('images.unsplash.com');
+    }
+
+    async cleanupExpiredCache() {
+        if (!this.isServiceWorkerSupported) return;
+
+        try {
+            const cacheNames = await caches.keys();
+            const currentCaches = [this.CACHE_NAME, this.API_CACHE_NAME, this.IMAGE_CACHE_NAME];
+
+            // Delete old caches
+            for (const cacheName of cacheNames) {
+                if (!currentCaches.includes(cacheName)) {
+                    await caches.delete(cacheName);
+                    console.log('Deleted old cache:', cacheName);
+                }
+            }
+
+            // Clean expired items from current caches
+            await this.cleanExpiredCacheItems(this.API_CACHE_NAME);
+            await this.cleanExpiredCacheItems(this.IMAGE_CACHE_NAME);
+
+            console.log('Cache cleanup completed');
+        } catch (error) {
+            console.error('Cache cleanup failed:', error);
+        }
+    }
+
+    async cleanExpiredCacheItems(cacheName) {
+        try {
+            const cache = await caches.open(cacheName);
+            const requests = await cache.keys();
+            const now = Date.now();
+
+            for (const request of requests) {
+                const response = await cache.match(request);
+                if (response) {
+                    const cachedTimestamp = response.headers.get('sw-cached-timestamp');
+                    if (cachedTimestamp) {
+                        const cacheAge = now - parseInt(cachedTimestamp);
+                        const maxAge = this.getCacheMaxAge(request.url) * 1000;
+
+                        if (cacheAge > maxAge) {
+                            await cache.delete(request);
+                        }
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error cleaning expired cache items:', error);
+        }
+    }
+
+    async prefetchArticleImages(articles) {
+        if (!this.isServiceWorkerSupported || !navigator.onLine) return;
+
+        try {
+            const imageUrls = articles
+                .map(article => article.image)
+                .filter(url => url && url !== "None" && this.isImageUrl(url))
+                .slice(0, 5); // Prefetch only first 5 images
+
+            for (const url of imageUrls) {
+                try {
+                    const response = await fetch(url, { mode: 'no-cors' });
+                    if (response.ok) {
+                        await this.cacheImage(url, response);
+                    }
+                } catch (error) {
+                    // Silently fail for prefetching
+                }
+            }
+        } catch (error) {
+            console.error('Image prefetching failed:', error);
+        }
+    }
+
+    async getCacheStats() {
+        if (!this.isServiceWorkerSupported) {
+            return { static: 0, api: 0, images: 0, total: 0 };
         }
 
         try {
-            const message = {
-                type: 'CLEAR_CACHE',
-                data: { cacheType: cacheType }
-            };
+            const cacheNames = [this.CACHE_NAME, this.API_CACHE_NAME, this.IMAGE_CACHE_NAME];
+            const stats = { static: 0, api: 0, images: 0, total: 0 };
 
-            await this.sendMessage(message);
+            for (const cacheName of cacheNames) {
+                const cache = await caches.open(cacheName);
+                const requests = await cache.keys();
+
+                let size = 0;
+                for (const request of requests) {
+                    const response = await cache.match(request);
+                    if (response) {
+                        const blob = await response.blob();
+                        size += blob.size;
+                    }
+                }
+
+                if (cacheName === this.CACHE_NAME) {
+                    stats.static = Math.round(size / 1024); // KB
+                } else if (cacheName === this.API_CACHE_NAME) {
+                    stats.api = Math.round(size / 1024);
+                } else if (cacheName === this.IMAGE_CACHE_NAME) {
+                    stats.images = Math.round(size / 1024);
+                }
+            }
+
+            stats.total = stats.static + stats.api + stats.images;
+            return stats;
+        } catch (error) {
+            console.error('Failed to get cache stats:', error);
+            return { static: 0, api: 0, images: 0, total: 0 };
+        }
+    }
+
+    async clearAllCache() {
+        if (!this.isServiceWorkerSupported) return false;
+
+        try {
+            const cacheNames = await caches.keys();
+
+            for (const cacheName of cacheNames) {
+                await caches.delete(cacheName);
+            }
+
+            console.log('All cache cleared');
             return true;
         } catch (error) {
             console.error('Failed to clear cache:', error);
@@ -254,297 +315,99 @@ class CacheController {
         }
     }
 
-    /**
-     * Get cache statistics
-     */
-    async getCacheStats() {
-        if (!this.registration || !this.registration.active) {
-            return null;
-        }
+    showUpdateNotification() {
+        // Create update notification toast
+        const toast = document.createElement('div');
+        toast.className = 'toast info update-toast';
+        toast.innerHTML = `
+            <div class="toast-icon">
+                <i class="fas fa-sync-alt"></i>
+            </div>
+            <div class="toast-message">
+                <strong>Update Available</strong>
+                <p>A new version is available. Refresh to update.</p>
+            </div>
+            <button class="toast-action btn btn-primary" id="update-btn">
+                Refresh
+            </button>
+            <button class="toast-close">
+                <i class="fas fa-times"></i>
+            </button>
+        `;
 
-        try {
-            const message = {
-                type: 'GET_CACHE_STATS'
-            };
+        document.getElementById('toast-container').appendChild(toast);
 
-            const stats = await this.sendMessage(message);
-            return stats;
-        } catch (error) {
-            console.error('Failed to get cache stats:', error);
-            return null;
-        }
-    }
-
-    /**
-     * Register background sync
-     */
-    async registerBackgroundSync(tag = 'sync-offline-actions') {
-        if (!this.registration || !this.registration.active) {
-            return false;
-        }
-
-        try {
-            const message = {
-                type: 'REGISTER_BACKGROUND_SYNC',
-                data: { tag: tag }
-            };
-
-            await this.sendMessage(message);
-            return true;
-        } catch (error) {
-            console.error('Failed to register background sync:', error);
-            return false;
-        }
-    }
-
-    /**
-     * Register push notification subscription
-     */
-    async registerPushSubscription() {
-        if (!this.registration || !this.registration.active) {
-            return false;
-        }
-
-        try {
-            // Check if push is supported
-            if (!('PushManager' in window)) {
-                console.warn('Push notifications not supported');
-                return false;
+        // Add event listeners
+        toast.querySelector('#update-btn').addEventListener('click', () => {
+            if (this.registration && this.registration.waiting) {
+                this.registration.waiting.postMessage({ type: 'SKIP_WAITING' });
             }
-
-            // Request notification permission
-            const permission = await Notification.requestPermission();
-            if (permission !== 'granted') {
-                console.warn('Notification permission denied');
-                return false;
-            }
-
-            // Get VAPID key from server (you would need to implement this)
-            const vapidKey = await this.getVapidKey();
-            if (!vapidKey) {
-                console.warn('VAPID key not available');
-                return false;
-            }
-
-            const subscription = await this.registration.pushManager.subscribe({
-                userVisibleOnly: true,
-                applicationServerKey: this.urlBase64ToUint8Array(vapidKey)
-            });
-
-            // Send subscription to server
-            await this.sendPushSubscription(subscription);
-
-            return true;
-        } catch (error) {
-            console.error('Failed to register push subscription:', error);
-            return false;
-        }
-    }
-
-    /**
-     * Send message to service worker
-     */
-    async sendMessage(message) {
-        return new Promise((resolve, reject) => {
-            const messageChannel = new MessageChannel();
-
-            messageChannel.port1.onmessage = (event) => {
-                if (event.data.error) {
-                    reject(new Error(event.data.error));
-                } else {
-                    resolve(event.data);
-                }
-            };
-
-            if (navigator.serviceWorker.controller) {
-                navigator.serviceWorker.controller.postMessage(message, [messageChannel.port2]);
-            } else {
-                reject(new Error('No active service worker'));
-            }
+            window.location.reload();
         });
-    }
 
-    /**
-     * Handle push notifications
-     */
-    handlePushNotification(data) {
-        // Show notification to user
-        if ('Notification' in window && Notification.permission === 'granted') {
-            const notification = new Notification(data.title || 'Veritas News', {
-                body: data.body || 'New articles available',
-                icon: '/icon-192.png',
-                badge: '/badge-72.png',
-                tag: 'veritas-news-update',
-                actions: [{
-                        action: 'open',
-                        title: 'Open App',
-                        icon: '/icon-192.png'
-                    },
-                    {
-                        action: 'dismiss',
-                        title: 'Dismiss',
-                        icon: '/icon-192.png'
-                    }
-                ]
-            });
+        toast.querySelector('.toast-close').addEventListener('click', () => {
+            toast.remove();
+        });
 
-            notification.onclick = (event) => {
-                event.preventDefault();
-                window.focus();
-                window.open('/', '_blank');
-                notification.close();
-            };
-        }
-    }
-
-    /**
-     * Handle storage quota exceeded
-     */
-    handleStorageQuotaExceeded(data) {
-        console.warn('Storage quota exceeded:', data);
-
-        // Show warning to user
-        const container = document.getElementById('toast-container');
-        if (container) {
-            const toast = document.createElement('div');
-            toast.className = 'toast warning';
-            toast.innerHTML = `
-                <div class="toast-icon">
-                    <i class="fas fa-exclamation-triangle"></i>
-                </div>
-                <div class="toast-message">Storage space is running low. Some offline features may be limited.</div>
-                <button class="toast-close">
-                    <i class="fas fa-times"></i>
-                </button>
-            `;
-
-            container.appendChild(toast);
-
-            // Remove toast after 8 seconds
-            setTimeout(() => {
+        // Auto-remove after 30 seconds
+        setTimeout(() => {
+            if (toast.parentNode) {
                 toast.remove();
-            }, 8000);
-
-            // Close button
-            toast.querySelector('.toast-close').addEventListener('click', () => {
-                toast.remove();
-            });
-        }
+            }
+        }, 30000);
     }
 
-    /**
-     * Get VAPID key from server
-     */
-    async getVapidKey() {
-        // This would typically fetch from your server
-        // For now, return null to disable push notifications
-        return null;
-    }
-
-    /**
-     * Send push subscription to server
-     */
-    async sendPushSubscription(subscription) {
-        // This would send the subscription to your server
-        // For now, just log it
-        console.log('Push subscription:', subscription);
-    }
-
-    /**
-     * Convert base64 string to Uint8Array
-     */
-    urlBase64ToUint8Array(base64String) {
-        const padding = '='.repeat((4 - base64String.length % 4) % 4);
-        const base64 = (base64String + padding)
-            .replace(/-/g, '+')
-            .replace(/_/g, '/');
-
-        const rawData = window.atob(base64);
-        const outputArray = new Uint8Array(rawData.length);
-
-        for (let i = 0; i < rawData.length; ++i) {
-            outputArray[i] = rawData.charCodeAt(i);
-        }
-        return outputArray;
-    }
-
-    /**
-     * Pre-cache likely next articles
-     */
-    async preCacheArticles(articles) {
-        if (!this.registration || !this.registration.active) {
+    async requestBackgroundSync() {
+        if (!this.registration || !('sync' in this.registration)) {
             return false;
         }
 
         try {
-            const message = {
-                type: 'PRE_CACHE_ARTICLES',
-                data: {
-                    articles: articles.slice(0, 5) // Cache first 5 articles
-                }
-            };
-
-            await this.sendMessage(message);
+            await this.registration.sync.register('sync-news');
+            console.log('Background sync registered');
             return true;
         } catch (error) {
-            console.error('Failed to pre-cache articles:', error);
+            console.error('Background sync registration failed:', error);
             return false;
         }
     }
 
-    /**
-     * Cleanup old cache entries
-     */
-    async cleanupCache() {
-        if (!this.registration || !this.registration.active) {
+    async requestPeriodicSync() {
+        if (!this.registration || !('periodicSync' in this.registration)) {
             return false;
         }
 
         try {
-            const message = {
-                type: 'CLEANUP_CACHE',
-                data: {
-                    maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days in milliseconds
-                }
-            };
+            // Check if periodic sync is supported and permitted
+            const status = await navigator.permissions.query({
+                name: 'periodic-background-sync'
+            });
 
-            await this.sendMessage(message);
-            return true;
+            if (status.state === 'granted') {
+                await this.registration.periodicSync.register('news-update', {
+                    minInterval: 24 * 60 * 60 * 1000 // 24 hours
+                });
+                console.log('Periodic sync registered');
+                return true;
+            }
         } catch (error) {
-            console.error('Failed to cleanup cache:', error);
-            return false;
+            console.error('Periodic sync not supported:', error);
         }
-    }
 
-    /**
-     * Get service worker status
-     */
-    getStatus() {
-        return {
-            supported: this.isServiceWorkerSupported,
-            registered: !!this.registration,
-            active: !!(this.registration && this.registration.active),
-            waiting: !!(this.registration && this.registration.waiting),
-            installing: !!(this.registration && this.registration.installing)
-        };
-    }
-
-    /**
-     * Unregister service worker (for debugging)
-     */
-    async unregister() {
-        if (this.registration) {
-            const result = await this.registration.unregister();
-            console.log('Service Worker unregistered:', result);
-            return result;
-        }
         return false;
     }
-}
 
-// Export for use in other modules
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = CacheController;
-} else {
-    window.CacheController = CacheController;
+    async sendMessageToServiceWorker(message) {
+        if (!this.registration || !this.registration.active) {
+            return false;
+        }
+
+        try {
+            await this.registration.active.postMessage(message);
+            return true;
+        } catch (error) {
+            console.error('Failed to send message to service worker:', error);
+            return false;
+        }
+    }
 }

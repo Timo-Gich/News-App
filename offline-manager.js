@@ -1,424 +1,537 @@
-/**
- * OfflineManager Module
- * Main coordinator for offline operations and user experience
- */
-
+// offline-manager.js - Main Coordinator for Offline Features
 class OfflineManager {
     constructor() {
-        this.offlineStorage = new OfflineStorage();
+        this.storage = new OfflineStorage();
         this.cacheController = new CacheController();
 
         this.isOnline = navigator.onLine;
+        this.offlineMode = false;
         this.syncInProgress = false;
-        this.storageUsage = { articles: 0, bookmarks: 0, queue: 0, totalSize: 0 };
 
-        this.init();
+        this.stats = {
+            totalArticles: 0,
+            offlineArticles: 0,
+            storageUsage: 0,
+            lastSync: null
+        };
     }
 
-    /**
-     * Initialize offline manager
-     */
     async init() {
-        // Set up event listeners
-        this.setupEventListeners();
+        console.log('Initializing Offline Manager...');
 
-        // Initialize storage and cache
-        await this.initializeOfflineCapabilities();
+        // Initialize storage
+        const storageInitialized = await this.storage.init();
+        if (!storageInitialized) {
+            console.warn('Offline storage initialization failed');
+        }
 
-        // Update UI state
-        this.updateUIState();
+        // Initialize cache controller
+        const cacheInitialized = await this.cacheController.init();
+        if (!cacheInitialized) {
+            console.warn('Cache controller initialization failed');
+        }
 
-        // Start background sync if online
-        if (this.isOnline) {
-            this.startBackgroundSync();
+        // Set up online/offline listeners
+        this.setupNetworkListeners();
+
+        // Update initial stats
+        await this.updateStats();
+
+        // Check if we should start in offline mode
+        this.checkInitialConnection();
+
+        console.log('Offline Manager initialized');
+        return true;
+    }
+
+    setupNetworkListeners() {
+        window.addEventListener('online', () => this.handleOnline());
+        window.addEventListener('offline', () => this.handleOffline());
+
+        // Listen for service worker messages
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.addEventListener('message', (event) => {
+                this.handleServiceWorkerMessage(event);
+            });
         }
     }
 
-    /**
-     * Set up event listeners
-     */
-    setupEventListeners() {
-        // Online/offline events
-        window.addEventListener('online', () => {
-            this.handleOnline();
-        });
+    checkInitialConnection() {
+        this.isOnline = navigator.onLine;
 
-        window.addEventListener('offline', () => {
-            this.handleOffline();
-        });
-
-        // Page visibility for sync optimization
-        document.addEventListener('visibilitychange', () => {
-            if (!document.hidden && this.isOnline) {
-                this.syncOfflineActions();
-            }
-        });
-
-        // Beforeunload for cleanup
-        window.addEventListener('beforeunload', () => {
-            this.cleanup();
-        });
-
-        // Storage quota monitoring
-        if ('storage' in navigator && 'estimate' in navigator.storage) {
-            this.monitorStorageQuota();
+        if (!this.isOnline) {
+            this.enableOfflineMode();
+            this.showOfflineIndicator();
+        } else {
+            this.disableOfflineMode();
+            this.hideOfflineIndicator();
         }
     }
 
-    /**
-     * Initialize offline capabilities
-     */
-    async initializeOfflineCapabilities() {
-        try {
-            // Initialize storage
-            if (this.offlineStorage.isSupported) {
-                await this.offlineStorage.init();
-                this.storageUsage = await this.offlineStorage.getStorageUsage();
-            }
-
-            // Cache static assets
-            if (this.cacheController.isServiceWorkerSupported) {
-                await this.cacheController.cacheStaticAssets();
-            }
-
-            console.log('Offline capabilities initialized');
-        } catch (error) {
-            console.error('Failed to initialize offline capabilities:', error);
-        }
-    }
-
-    /**
-     * Handle online state
-     */
     async handleOnline() {
-        if (this.isOnline) return;
-
+        console.log('Network: Online');
         this.isOnline = true;
-        console.log('Back online, syncing offline actions...');
+        this.disableOfflineMode();
+        this.hideOfflineIndicator();
 
-        // Update UI
-        this.updateUIState();
+        // Try to sync pending actions
+        await this.syncPendingActions();
 
-        // Sync offline actions
-        await this.syncOfflineActions();
+        // Update cache in background
+        this.updateCacheInBackground();
 
-        // Update storage usage
-        this.storageUsage = await this.offlineStorage.getStorageUsage();
-        this.updateStorageUI();
+        // Update stats
+        await this.updateStats();
 
-        // Show success message
-        this.showToast('Back online! Syncing your offline actions...', 'success');
+        // Show online notification
+        this.showToast('Back online! Syncing your data...', 'success');
     }
 
-    /**
-     * Handle offline state
-     */
-    handleOffline() {
-        if (!this.isOnline) return;
-
+    async handleOffline() {
+        console.log('Network: Offline');
         this.isOnline = false;
-        console.log('Going offline');
+        this.enableOfflineMode();
+        this.showOfflineIndicator();
 
-        // Update UI
-        this.updateUIState();
+        // Update stats
+        await this.updateStats();
 
-        // Show warning message
-        this.showToast('You are now offline. Some features may be limited.', 'warning');
+        // Show offline notification
+        this.showToast('You are offline. Using cached articles.', 'warning');
     }
 
-    /**
-     * Save article for offline reading
-     */
+    enableOfflineMode() {
+        this.offlineMode = true;
+        document.body.classList.add('offline-mode');
+
+        // Update UI elements
+        this.updateConnectionStatus('offline');
+    }
+
+    disableOfflineMode() {
+        this.offlineMode = false;
+        document.body.classList.remove('offline-mode');
+
+        // Update UI elements
+        this.updateConnectionStatus('online');
+    }
+
     async saveArticleForOffline(article) {
-        try {
-            // Store in IndexedDB
-            const success = await this.offlineStorage.storeArticle(article);
+        if (!article || !article.id) {
+            throw new Error('Invalid article');
+        }
 
-            if (success) {
-                // Cache images
+        try {
+            // Save to IndexedDB
+            const saved = await this.storage.saveArticle(article, true);
+
+            if (saved) {
+                // Cache the article image if available
                 if (article.image && article.image !== "None") {
-                    await this.cacheController.cacheImage(article.image, null);
+                    await this.cacheArticleImage(article.image);
                 }
 
-                // Update storage usage
-                this.storageUsage = await this.offlineStorage.getStorageUsage();
-                this.updateStorageUI();
+                // Update stats
+                await this.updateStats();
 
+                // Show success message
                 this.showToast('Article saved for offline reading!', 'success');
+
                 return true;
-            } else {
-                this.showToast('Failed to save article offline.', 'error');
-                return false;
             }
+
+            return false;
         } catch (error) {
-            console.error('Error saving article offline:', error);
-            this.showToast('Error saving article offline.', 'error');
+            console.error('Failed to save article for offline:', error);
+            this.showToast('Failed to save article for offline', 'error');
             return false;
         }
     }
 
-    /**
-     * Remove article from offline storage
-     */
-    async removeArticleFromOffline(articleId) {
+    async cacheArticleImage(imageUrl) {
+        if (!imageUrl || !this.isOnline) return false;
+
         try {
-            const success = await this.offlineStorage.deleteArticle(articleId);
-
-            if (success) {
-                // Update storage usage
-                this.storageUsage = await this.offlineStorage.getStorageUsage();
-                this.updateStorageUI();
-
-                this.showToast('Article removed from offline storage.', 'info');
+            const response = await fetch(imageUrl);
+            if (response.ok) {
+                await this.cacheController.cacheImage(imageUrl, response.clone());
                 return true;
-            } else {
-                this.showToast('Failed to remove article from offline storage.', 'error');
-                return false;
             }
         } catch (error) {
-            console.error('Error removing article from offline storage:', error);
-            this.showToast('Error removing article from offline storage.', 'error');
-            return false;
+            console.error('Failed to cache image:', error);
+        }
+
+        return false;
+    }
+
+    async getOfflineArticles(limit = 50, offset = 0) {
+        try {
+            const articles = await this.storage.getOfflineArticles(limit, offset);
+            return articles;
+        } catch (error) {
+            console.error('Failed to get offline articles:', error);
+            return [];
         }
     }
 
-    /**
-     * Toggle bookmark with offline support
-     */
-    async toggleBookmark(articleId, isBookmarked, articleData = null) {
+    async searchOfflineArticles(query, filters = {}) {
         try {
-            // Update local storage immediately
-            const success = await this.offlineStorage.toggleBookmark(articleId, isBookmarked);
-
-            if (success) {
-                if (this.isOnline) {
-                    // Sync immediately if online
-                    // (This would call your existing bookmark API)
-                } else {
-                    // Queue for sync if offline
-                    await this.offlineStorage.queueAction('bookmark', {
-                        article_id: articleId,
-                        action: isBookmarked ? 'add' : 'remove',
-                        article_data: articleData
-                    });
-                }
-
-                this.showToast(isBookmarked ? 'Article bookmarked!' : 'Bookmark removed!', 'success');
-                return true;
-            } else {
-                this.showToast('Failed to update bookmark.', 'error');
-                return false;
-            }
+            const articles = await this.storage.searchArticles(query, filters);
+            return articles;
         } catch (error) {
-            console.error('Error toggling bookmark:', error);
-            this.showToast('Error updating bookmark.', 'error');
-            return false;
+            console.error('Failed to search offline articles:', error);
+            return [];
         }
     }
 
-    /**
-     * Update reading progress with offline support
-     */
-    async updateReadingProgress(articleId, scrollPosition, readPercentage) {
+    async getArticleWithOfflineStatus(articleId) {
         try {
-            // Update local storage immediately
-            const success = await this.offlineStorage.updateReadingProgress(articleId, scrollPosition, readPercentage);
+            // Get article from IndexedDB
+            const offlineArticle = await this.storage.getArticle(articleId);
 
-            if (success && this.isOnline) {
-                // Sync to server if online
-                // (This would call your existing reading progress API)
-            } else if (!this.isOnline) {
-                // Queue for sync if offline
-                await this.offlineStorage.queueAction('reading_progress', {
-                    article_id: articleId,
-                    scroll_position: scrollPosition,
-                    read_percentage: readPercentage
+            if (offlineArticle) {
+                // Check if it's saved for offline
+                return {
+                    ...offlineArticle,
+                    availableOffline: offlineArticle.savedForOffline || false,
+                    read: offlineArticle.read || false
+                };
+            }
+
+            return null;
+        } catch (error) {
+            console.error('Failed to get article offline status:', error);
+            return null;
+        }
+    }
+
+    async updateReadingProgress(articleId, progress) {
+        try {
+            await this.storage.updateReadingProgress(articleId, progress);
+
+            // Queue sync action if online
+            if (this.isOnline) {
+                await this.storage.queueOfflineAction({
+                    type: 'update_progress',
+                    articleId: articleId,
+                    progress: progress
                 });
             }
 
-            return success;
+            return true;
         } catch (error) {
-            console.error('Error updating reading progress:', error);
+            console.error('Failed to update reading progress:', error);
             return false;
         }
     }
 
-    /**
-     * Search articles offline
-     */
-    async searchOfflineArticles(query) {
+    async toggleBookmark(article) {
         try {
-            const results = await this.offlineStorage.searchArticles(query);
-            return results;
+            const result = await this.storage.toggleBookmark(article);
+
+            // Queue sync action if online
+            if (this.isOnline) {
+                await this.storage.queueOfflineAction({
+                    type: 'bookmark',
+                    articleId: article.id,
+                    bookmarked: result.bookmarked,
+                    article: article
+                });
+            }
+
+            // Update stats
+            await this.updateStats();
+
+            this.showToast(
+                result.bookmarked ? 'Article bookmarked!' : 'Bookmark removed!',
+                result.bookmarked ? 'success' : 'info'
+            );
+
+            return result;
         } catch (error) {
-            console.error('Error searching offline articles:', error);
+            console.error('Failed to toggle bookmark:', error);
+            this.showToast('Failed to update bookmark', 'error');
+            return { bookmarked: false };
+        }
+    }
+
+    async isArticleBookmarked(articleId) {
+        try {
+            return await this.storage.isArticleBookmarked(articleId);
+        } catch (error) {
+            console.error('Failed to check bookmark status:', error);
+            return false;
+        }
+    }
+
+    async getBookmarkedArticles() {
+        try {
+            return await this.storage.getBookmarkedArticles();
+        } catch (error) {
+            console.error('Failed to get bookmarked articles:', error);
             return [];
         }
     }
 
-    /**
-     * Get all offline articles
-     */
-    async getOfflineArticles() {
-        try {
-            const articles = await this.offlineStorage.getAllArticles();
-            return articles;
-        } catch (error) {
-            console.error('Error getting offline articles:', error);
-            return [];
-        }
-    }
-
-    /**
-     * Get all bookmarks
-     */
-    async getBookmarks() {
-        try {
-            const bookmarks = await this.offlineStorage.getBookmarks();
-            return bookmarks;
-        } catch (error) {
-            console.error('Error getting bookmarks:', error);
-            return [];
-        }
-    }
-
-    /**
-     * Sync offline actions to server
-     */
-    async syncOfflineActions() {
-        if (!this.isOnline || this.syncInProgress) {
+    async syncPendingActions() {
+        if (this.syncInProgress || !this.isOnline) {
             return;
         }
 
         this.syncInProgress = true;
 
         try {
-            const pendingActions = await this.offlineStorage.getPendingActions();
+            const pendingActions = await this.storage.getPendingActions();
+
+            if (pendingActions.length === 0) {
+                this.syncInProgress = false;
+                return;
+            }
+
+            console.log(`Syncing ${pendingActions.length} pending actions...`);
+
+            let successCount = 0;
+            let failCount = 0;
 
             for (const action of pendingActions) {
                 try {
-                    await this.processOfflineAction(action);
-                    await this.offlineStorage.markActionSynced(action.id);
+                    // Here you would sync with your backend
+                    // For now, we'll just mark as completed
+                    await this.storage.updateActionStatus(action.id, 'completed');
+                    successCount++;
+
+                    // Simulate API call delay
+                    await new Promise(resolve => setTimeout(resolve, 100));
                 } catch (error) {
-                    console.error('Failed to sync action:', action, error);
+                    console.error('Failed to sync action:', error);
+                    await this.storage.updateActionStatus(action.id, 'failed');
+                    failCount++;
                 }
             }
 
-            this.showToast('Offline actions synced successfully!', 'success');
+            console.log(`Sync completed: ${successCount} succeeded, ${failCount} failed`);
+
+            if (successCount > 0) {
+                this.showToast(`Synced ${successCount} actions`, 'success');
+            }
+
+            // Update last sync time
+            this.stats.lastSync = new Date().toISOString();
+            await this.storage.setSetting('lastSync', this.stats.lastSync);
+
         } catch (error) {
-            console.error('Error syncing offline actions:', error);
+            console.error('Sync failed:', error);
         } finally {
             this.syncInProgress = false;
         }
     }
 
-    /**
-     * Process individual offline action
-     */
-    async processOfflineAction(action) {
-        switch (action.action_type) {
-            case 'bookmark':
-                // Call your existing bookmark API
-                console.log('Syncing bookmark action:', action.data);
-                break;
-            case 'reading_progress':
-                // Call your existing reading progress API
-                console.log('Syncing reading progress:', action.data);
-                break;
-            default:
-                console.warn('Unknown action type:', action.action_type);
-        }
-    }
+    async updateCacheInBackground() {
+        if (!this.isOnline) return;
 
-    /**
-     * Start background sync
-     */
-    startBackgroundSync() {
-        if ('serviceWorker' in navigator && 'sync' in window.ServiceWorkerRegistration.prototype) {
-            this.cacheController.registerBackgroundSync('sync-offline-actions');
-        }
-
-        // Also sync periodically
-        setInterval(() => {
-            if (this.isOnline) {
-                this.syncOfflineActions();
-            }
-        }, 5 * 60 * 1000); // Every 5 minutes
-    }
-
-    /**
-     * Monitor storage quota
-     */
-    async monitorStorageQuota() {
         try {
-            const quota = await navigator.storage.estimate();
-            const usagePercentage = (quota.usage / quota.quota) * 100;
+            // Update latest news cache
+            await this.cacheController.sendMessageToServiceWorker({
+                type: 'UPDATE_CACHE',
+                timestamp: Date.now()
+            });
 
-            if (usagePercentage > 80) {
-                this.handleStorageQuotaWarning(usagePercentage);
-            }
+            // Clean up expired cache
+            await this.cacheController.cleanupExpiredCache();
+
+            console.log('Background cache update completed');
         } catch (error) {
-            console.error('Failed to monitor storage quota:', error);
+            console.error('Background cache update failed:', error);
         }
     }
 
-    /**
-     * Handle storage quota warning
-     */
-    handleStorageQuotaWarning(percentage) {
-        this.showToast(`Storage usage is ${Math.round(percentage)}%. Consider cleaning up old articles.`, 'warning');
-    }
-
-    /**
-     * Update UI state based on online/offline status
-     */
-    updateUIState() {
-        // Update online status indicator
-        const statusElement = document.getElementById('online-status');
-        if (statusElement) {
-            if (this.isOnline) {
-                statusElement.className = 'online-status online';
-                statusElement.innerHTML = '<i class="fas fa-wifi"></i> Online';
-            } else {
-                statusElement.className = 'online-status offline';
-                statusElement.innerHTML = '<i class="fas fa-wifi-slash"></i> Offline';
+    async updateStats() {
+        try {
+            // Get storage stats
+            const storageStats = await this.storage.getStorageStats();
+            if (storageStats) {
+                this.stats.totalArticles = storageStats.totalArticles || 0;
+                this.stats.offlineArticles = storageStats.offlineArticles || 0;
+                this.stats.readArticles = storageStats.readArticles || 0;
+                this.stats.bookmarkedArticles = storageStats.bookmarkedArticles || 0;
             }
-        }
 
-        // Update storage usage
-        this.updateStorageUI();
+            // Get storage usage
+            const storageUsage = await this.storage.estimateStorageUsage();
+            if (storageUsage) {
+                this.stats.storageUsage = storageUsage.usage || 0;
+                this.stats.storageQuota = storageUsage.quota || 0;
+                this.stats.storagePercentage = storageUsage.percentage || 0;
+            }
+
+            // Get last sync time
+            const lastSync = await this.storage.getSetting('lastSync');
+            this.stats.lastSync = lastSync;
+
+            // Update UI
+            this.updateStatsUI();
+
+            return this.stats;
+        } catch (error) {
+            console.error('Failed to update stats:', error);
+            return this.stats;
+        }
     }
 
-    /**
-     * Update storage usage UI
-     */
-    updateStorageUI() {
-        // Update storage usage indicators
-        const storageBar = document.getElementById('storage-usage-bar');
-        const storageText = document.getElementById('storage-usage-text');
+    updateStatsUI() {
+        // Update offline count in stats bar
+        const offlineCountEl = document.getElementById('offline-count');
+        if (offlineCountEl) {
+            offlineCountEl.textContent = this.stats.offlineArticles;
+        }
+
+        // Update storage progress bar
+        const storageBar = document.getElementById('storage-bar');
+        const storageText = document.getElementById('storage-text');
 
         if (storageBar && storageText) {
-            const totalItems = this.storageUsage.totalSize;
-            const percentage = Math.min((totalItems / 100) * 100, 100); // Simplified calculation
+            const percentage = this.stats.storagePercentage;
+            const usedMB = Math.round(this.stats.storageUsage / (1024 * 1024) * 100) / 100;
+            const quotaMB = Math.round(this.stats.storageQuota / (1024 * 1024) * 100) / 100;
 
-            storageBar.style.width = `${percentage}%`;
-            storageText.textContent = `${totalItems} items stored`;
+            storageBar.style.width = Math.min(percentage, 100) + '%';
+            storageBar.style.backgroundColor = percentage > 90 ? '#ef4444' :
+                percentage > 70 ? '#f59e0b' : '#10b981';
 
-            // Color coding
-            if (percentage > 80) {
-                storageBar.style.backgroundColor = '#ef4444'; // Red
-            } else if (percentage > 60) {
-                storageBar.style.backgroundColor = '#f59e0b'; // Orange
-            } else {
-                storageBar.style.backgroundColor = '#10b981'; // Green
-            }
+            storageText.textContent = `${usedMB} MB of ${quotaMB} MB used`;
         }
     }
 
-    /**
-     * Show toast notification
-     */
+    updateConnectionStatus(status) {
+        const connectionStatusEl = document.getElementById('connection-status');
+        const offlineIndicatorEl = document.getElementById('offline-indicator');
+
+        if (connectionStatusEl) {
+            connectionStatusEl.className = `connection-status ${status}`;
+            connectionStatusEl.querySelector('.status-text').textContent =
+                status === 'online' ? 'Online' : 'Offline';
+        }
+
+        if (offlineIndicatorEl) {
+            offlineIndicatorEl.style.display = status === 'offline' ? 'flex' : 'none';
+        }
+    }
+
+    showOfflineIndicator() {
+        const indicator = document.getElementById('offline-indicator');
+        if (indicator) {
+            indicator.style.display = 'flex';
+            indicator.innerHTML = '<i class="fas fa-wifi-slash"></i><span>Offline</span>';
+        }
+    }
+
+    hideOfflineIndicator() {
+        const indicator = document.getElementById('offline-indicator');
+        if (indicator) {
+            indicator.style.display = 'none';
+        }
+    }
+
+    async clearOldArticles(days = 30) {
+        try {
+            const deletedCount = await this.storage.clearOldArticles(days);
+
+            // Also clean expired cache
+            await this.cacheController.cleanupExpiredCache();
+
+            // Update stats
+            await this.updateStats();
+
+            this.showToast(`Cleared ${deletedCount} old articles`, 'success');
+            return deletedCount;
+        } catch (error) {
+            console.error('Failed to clear old articles:', error);
+            this.showToast('Failed to clear old articles', 'error');
+            return 0;
+        }
+    }
+
+    async clearAllOfflineData() {
+        if (!confirm('Are you sure you want to clear all offline data? This cannot be undone.')) {
+            return false;
+        }
+
+        try {
+            // Clear IndexedDB
+            await this.storage.clearAllData();
+
+            // Clear cache
+            await this.cacheController.clearAllCache();
+
+            // Update stats
+            await this.updateStats();
+
+            this.showToast('All offline data cleared', 'success');
+            return true;
+        } catch (error) {
+            console.error('Failed to clear offline data:', error);
+            this.showToast('Failed to clear offline data', 'error');
+            return false;
+        }
+    }
+
+    async exportLibrary() {
+        try {
+            const articles = await this.storage.getOfflineArticles(1000, 0);
+            const bookmarks = await this.storage.getBookmarkedArticles();
+
+            const exportData = {
+                version: '1.0',
+                exportedAt: new Date().toISOString(),
+                articles: articles,
+                bookmarks: bookmarks,
+                stats: this.stats
+            };
+
+            const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+                type: 'application/json'
+            });
+
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `currents-news-library-${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            this.showToast('Library exported successfully', 'success');
+            return true;
+        } catch (error) {
+            console.error('Failed to export library:', error);
+            this.showToast('Failed to export library', 'error');
+            return false;
+        }
+    }
+
+    handleServiceWorkerMessage(event) {
+        const { data } = event;
+
+        switch (data.type) {
+            case 'CACHE_UPDATED':
+                console.log('Cache updated via service worker');
+                break;
+
+            case 'BACKGROUND_SYNC_COMPLETED':
+                console.log('Background sync completed');
+                this.showToast('Background sync completed', 'info');
+                break;
+
+            case 'NEW_CONTENT_AVAILABLE':
+                console.log('New content available');
+                this.showToast('New content is available. Refresh to see it.', 'info');
+                break;
+        }
+    }
+
     showToast(message, type = 'info') {
+        // Create toast element
         const container = document.getElementById('toast-container');
         if (!container) return;
 
@@ -446,7 +559,9 @@ class OfflineManager {
 
         // Remove toast after 5 seconds
         setTimeout(() => {
-            toast.remove();
+            if (toast.parentNode) {
+                toast.remove();
+            }
         }, 5000);
 
         // Close button
@@ -455,96 +570,39 @@ class OfflineManager {
         });
     }
 
-    /**
-     * Cleanup resources
-     */
-    cleanup() {
-        // Save any pending data
-        // Clean up event listeners if needed
-        console.log('Cleaning up offline manager');
-    }
-
-    /**
-     * Get offline status summary
-     */
-    getOfflineStatus() {
-        return {
-            isOnline: this.isOnline,
-            storageUsage: this.storageUsage,
-            syncInProgress: this.syncInProgress,
-            storageSupported: this.offlineStorage.isSupported,
-            cacheSupported: this.cacheController.isServiceWorkerSupported
-        };
-    }
-
-    /**
-     * Clear all offline data (for debugging/reset)
-     */
-    async clearAllOfflineData() {
-        try {
-            // Clear IndexedDB
-            await this.offlineStorage.clearAllData();
-
-            // Clear cache
-            await this.cacheController.clearCache('all');
-
-            // Update UI
-            this.storageUsage = { articles: 0, bookmarks: 0, queue: 0, totalSize: 0 };
-            this.updateStorageUI();
-
-            this.showToast('All offline data cleared.', 'info');
-            return true;
-        } catch (error) {
-            console.error('Error clearing offline data:', error);
-            this.showToast('Error clearing offline data.', 'error');
-            return false;
-        }
-    }
-
-    /**
-     * Pre-cache likely next articles for better performance
-     */
-    async preCacheNextArticles(articles) {
+    async prefetchRelatedArticles(currentArticle) {
         if (!this.isOnline) return;
 
         try {
-            // Cache images for next few articles
-            const nextArticles = articles.slice(0, 3);
-            for (const article of nextArticles) {
-                if (article.image && article.image !== "None") {
-                    await this.cacheController.cacheImage(article.image, null);
-                }
-            }
+            // Get articles from same category
+            const offlineArticles = await this.storage.searchArticles('', {
+                category: currentArticle.category && currentArticle.category[0]
+            });
 
-            // Pre-cache article content
-            await this.cacheController.preCacheArticles(nextArticles);
+            // Prefetch images for related articles
+            const articlesToPrefetch = offlineArticles
+                .filter(article => article.id !== currentArticle.id)
+                .slice(0, 3);
+
+            await this.cacheController.prefetchArticleImages(articlesToPrefetch);
         } catch (error) {
-            console.error('Error pre-caching articles:', error);
+            // Silent fail for prefetching
         }
     }
 
-    /**
-     * Cleanup old data based on retention policy
-     */
-    async cleanupOldData() {
+    async getCacheStats() {
         try {
-            // Clean up old articles (30-day retention)
-            await this.offlineStorage.cleanupOldArticles();
+            const cacheStats = await this.cacheController.getCacheStats();
+            const storageStats = await this.storage.getStorageStats();
 
-            // Update storage usage
-            this.storageUsage = await this.offlineStorage.getStorageUsage();
-            this.updateStorageUI();
-
-            this.showToast('Old offline data cleaned up.', 'info');
+            return {
+                cache: cacheStats,
+                storage: storageStats,
+                total: cacheStats.total + (storageStats.totalArticles * 50) // Estimate
+            };
         } catch (error) {
-            console.error('Error cleaning up old data:', error);
+            console.error('Failed to get cache stats:', error);
+            return null;
         }
     }
-}
-
-// Export for use in other modules
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = OfflineManager;
-} else {
-    window.OfflineManager = OfflineManager;
 }

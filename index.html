@@ -4,19 +4,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Veritas - Global News Aggregator</title>
+    <title>Currents News - Global News Aggregator</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
     <link rel="icon" type="image/x-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📰</text></svg>">
-    <!-- Add these lines to your existing <head> -->
+    <!-- PWA Meta Tags -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#2563eb">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Veritas">
+    <meta name="apple-mobile-web-app-title" content="Currents News">
     <link rel="apple-touch-icon" href="https://img.icons8.com/color/192/000000/news.png">
-    <meta name="description" content="Global news aggregator with offline reading capability">
+    <meta name="description" content="Global news aggregator with full offline reading capability">
+
+    <!-- Preload critical resources -->
+    <link rel="preload" href="styles.css" as="style">
+    <link rel="preload" href="script.js" as="script">
 </head>
 
 <body>
@@ -25,7 +29,11 @@
         <div class="container">
             <div class="logo">
                 <i class="fas fa-newspaper"></i>
-                <h1>Veritas<span>News</span></h1>
+                <h1>Currents<span>News</span></h1>
+                <div class="connection-status" id="connection-status">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Online</span>
+                </div>
             </div>
 
             <nav class="nav">
@@ -40,10 +48,15 @@
                     <li><a href="#" class="nav-link" data-category="technology"><i class="fas fa-laptop-code"></i> Tech</a></li>
                     <li><a href="#" class="nav-link" data-category="sports"><i class="fas fa-running"></i> Sports</a></li>
                     <li><a href="#" class="nav-link" data-category="entertainment"><i class="fas fa-film"></i> Entertainment</a></li>
+                    <li><a href="#" class="nav-link" id="offline-library-btn"><i class="fas fa-download"></i> Offline Library</a></li>
                 </ul>
             </nav>
 
             <div class="header-controls">
+                <div class="offline-indicator" id="offline-indicator" style="display: none;">
+                    <i class="fas fa-wifi-slash"></i>
+                    <span>Offline</span>
+                </div>
                 <button class="theme-toggle" title="Toggle dark mode">
                     <i class="fas fa-moon"></i>
                 </button>
@@ -72,6 +85,9 @@
                 </button>
                 <button id="advanced-toggle" class="btn btn-secondary">
                     <i class="fas fa-filter"></i> Filters
+                </button>
+                <button id="offline-search-toggle" class="btn btn-secondary" title="Search offline articles">
+                    <i class="fas fa-database"></i> Offline Search
                 </button>
             </div>
 
@@ -137,6 +153,9 @@
                 <button id="retry-btn" class="btn btn-primary">
                     <i class="fas fa-redo"></i> Retry
                 </button>
+                <button id="use-offline-btn" class="btn btn-secondary">
+                    <i class="fas fa-database"></i> Use Offline Articles
+                </button>
             </div>
 
             <!-- Stats Bar -->
@@ -147,6 +166,9 @@
                 </div>
                 <div class="stats-item">
                     <i class="fas fa-clock"></i> Updated: <span id="last-updated">Just now</span>
+                </div>
+                <div class="stats-item">
+                    <i class="fas fa-database"></i> Offline: <span id="offline-count">0</span> articles
                 </div>
                 <div class="stats-item">
                     <i class="fas fa-language"></i> Language: <span id="current-language">English</span>
@@ -190,12 +212,13 @@
         <div class="container">
             <div class="footer-content">
                 <div class="footer-section">
-                    <h3><i class="fas fa-newspaper"></i> Veritas</h3>
-                    <p>Global news from over 50 countries in 15 languages. Powered by Veritas News API.</p>
+                    <h3><i class="fas fa-newspaper"></i> Currents News</h3>
+                    <p>Global news from over 50 countries in 15 languages. Powered by Currents News API.</p>
                     <div class="footer-links">
                         <a href="https://currentsapi.services/" target="_blank">API Documentation</a>
                         <a href="#" id="view-source">View Source Code</a>
                         <a href="#" id="refresh-news">Refresh News</a>
+                        <a href="#" id="storage-manager">Manage Storage</a>
                     </div>
                 </div>
                 <div class="footer-section">
@@ -205,11 +228,17 @@
                         <div class="status-indicator" id="api-status">
                             <span class="status-dot"></span> API Status: <span class="status-text">Connected</span>
                         </div>
+                        <div class="storage-status" id="storage-status">
+                            <div class="storage-progress">
+                                <div class="storage-bar" id="storage-bar"></div>
+                            </div>
+                            <span class="storage-text" id="storage-text">0 MB used</span>
+                        </div>
                     </div>
                 </div>
             </div>
             <div class="footer-bottom">
-                <p>&copy; 2024 Veritas News App. Data provided by <a href="https://currentsapi.services/" target="_blank">Currents News API</a>.</p>
+                <p>&copy; 2024 Currents News App. Data provided by <a href="https://currentsapi.services/" target="_blank">Currents News API</a>.</p>
                 <p class="disclaimer">© 2026 Timothy Thumbi. All rights reserved. This application, including its content, layout, and source code, is the exclusive property of Timothy Thumbi and is protected by applicable copyright and intellectual property laws.</p>
             </div>
         </div>
@@ -230,9 +259,12 @@
                     <span id="modal-date">Date</span>
                     <span id="modal-author">Author</span>
                     <span id="modal-category">Category</span>
+                    <span class="offline-badge" id="modal-offline-badge" style="display: none;">
+                        <i class="fas fa-download"></i> Available Offline
+                    </span>
                 </div>
                 <div class="modal-image-container">
-                    <img id="modal-image" src="" alt="Article Image">
+                    <img id="modal-image" src="" alt="Article Image" loading="lazy">
                 </div>
                 <div class="modal-description">
                     <p id="modal-description">Article description...</p>
@@ -241,6 +273,9 @@
                     <a href="#" target="_blank" id="modal-read-full" class="btn btn-primary">
                         <i class="fas fa-external-link-alt"></i> Read Full Article
                     </a>
+                    <button id="modal-save-offline" class="btn btn-secondary">
+                        <i class="far fa-save"></i> Save for Offline
+                    </button>
                     <button id="modal-share" class="btn btn-secondary">
                         <i class="fas fa-share-alt"></i> Share
                     </button>
@@ -248,11 +283,75 @@
                         <i class="far fa-bookmark"></i> Bookmark
                     </button>
                 </div>
+                <div class="reading-progress" id="reading-progress" style="display: none;">
+                    <div class="progress-label">
+                        <i class="fas fa-book-open"></i> Reading Progress
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progress-fill"></div>
+                    </div>
+                    <span class="progress-text" id="progress-text">0% read</span>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- Add this modal at the end of body -->
+    <!-- Offline Library Modal -->
+    <div class="modal" id="offline-library-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2><i class="fas fa-database"></i> Offline Library</h2>
+                <button class="modal-close" id="library-modal-close">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="library-stats">
+                    <div class="stat-item">
+                        <div class="stat-value" id="library-total">0</div>
+                        <div class="stat-label">Total Articles</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="library-size">0 MB</div>
+                        <div class="stat-label">Storage Used</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="library-read">0</div>
+                        <div class="stat-label">Read</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="library-bookmarked">0</div>
+                        <div class="stat-label">Bookmarked</div>
+                    </div>
+                </div>
+
+                <div class="library-controls">
+                    <button id="sync-offline" class="btn btn-primary">
+                        <i class="fas fa-sync-alt"></i> Sync Now
+                    </button>
+                    <button id="clear-old-articles" class="btn btn-secondary">
+                        <i class="fas fa-trash"></i> Clear Old Articles
+                    </button>
+                    <button id="export-library" class="btn btn-secondary">
+                        <i class="fas fa-download"></i> Export Library
+                    </button>
+                </div>
+
+                <div class="library-search">
+                    <input type="text" id="library-search" placeholder="Search offline articles...">
+                    <button id="library-search-btn" class="btn btn-secondary">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </div>
+
+                <div class="library-articles" id="library-articles">
+                    <!-- Offline articles will be loaded here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- API Key Modal -->
     <div class="modal" id="api-key-modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -312,6 +411,10 @@
     <span>Install App</span>
 </button>
 
+    <!-- Scripts -->
+    <script src="offline-storage.js"></script>
+    <script src="cache-controller.js"></script>
+    <script src="offline-manager.js"></script>
     <script src="script.js"></script>
 </body>
 
