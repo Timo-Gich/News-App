@@ -1,0 +1,37 @@
+# GitHub Pages headers for PWA support
+/* 
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer-when-downgrade
+
+# Service Worker headers
+/sw.js
+  Cache-Control: max-age=0, no-cache, no-store, must-revalidate
+
+# Manifest headers
+/manifest.json
+  Cache-Control: max-age=86400
+
+# HTML files should not be cached aggressively
+/*.html
+  Cache-Control: max-age=0, no-cache, no-store, must-revalidate
+
+# CSS and JS can be cached
+/*.css
+  Cache-Control: max-age=31536000
+
+/*.js
+  Cache-Control: max-age=31536000
+
+# Images can be cached
+/*.jpg
+  Cache-Control: max-age=31536000
+
+/*.png
+  Cache-Control: max-age=31536000
+
+/*.svg
+  Cache-Control: max-age=31536000
+
+/*.gif
+  Cache-Control: max-age=31536000

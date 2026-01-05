@@ -1,0 +1,2 @@
+# This file prevents GitHub Pages from running Jekyll on this repository
+# This is necessary for PWAs to work properly on GitHub Pages

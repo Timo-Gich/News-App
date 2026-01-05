@@ -2,7 +2,7 @@
     "name": "Veritas",
     "short_name": "Veritas",
     "description": "Global news aggregator using Veritas News API",
-    "start_url": "/",
+    "start_url": "/?standalone=true",
     "display": "standalone",
     "background_color": "#ffffff",
     "theme_color": "#2563eb",

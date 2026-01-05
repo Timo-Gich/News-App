@@ -68,6 +68,12 @@ self.addEventListener('fetch', event => {
         return;
     }
 
+    // Handle navigation requests for GitHub Pages PWA routing
+    if (request.mode === 'navigate') {
+        event.respondWith(handleNavigationRequest(event));
+        return;
+    }
+
     // For all other requests, try cache first with network fallback
     event.respondWith(
         caches.match(request)
@@ -159,6 +165,36 @@ function handleApiRequest(event) {
                     }), {
                         status: 503,
                         headers: { 'Content-Type': 'application/json' }
+                    });
+                });
+        });
+}
+
+// Handle navigation requests (for GitHub Pages PWA routing)
+function handleNavigationRequest(event) {
+    const { request } = event;
+
+    return caches.match('index.html')
+        .then(response => {
+            if (response) {
+                console.log('Service Worker: Serving app shell for navigation:', request.url);
+                return response;
+            }
+
+            // Fallback to network if cache miss
+            return fetch(request);
+        })
+        .catch(error => {
+            console.log('Service Worker: Navigation request failed:', error);
+            // Return offline page for navigation requests
+            return caches.match('offline.html')
+                .then(offlineResponse => {
+                    if (offlineResponse) {
+                        return offlineResponse;
+                    }
+                    return new Response('Offline - navigation not available', {
+                        status: 503,
+                        statusText: 'Service Unavailable'
                     });
                 });
         });
