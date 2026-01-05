@@ -8,15 +8,15 @@ const OFFLINE_URL = 'offline.html';
 
 // Static assets to cache on install
 const STATIC_ASSETS = [
-    '/',
-    '/index.html',
-    '/styles.css',
-    '/script.js',
-    '/offline-storage.js',
-    '/cache-controller.js',
-    '/offline-manager.js',
-    '/manifest.json',
-    '/offline.html',
+    './',
+    './index.html',
+    './styles.css',
+    './script.js',
+    './offline-storage.js',
+    './cache-controller.js',
+    './offline-manager.js',
+    './manifest.json',
+    './offline.html',
     'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
     'https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Roboto:wght@300;400;500&display=swap'
 ];
