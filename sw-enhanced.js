@@ -23,7 +23,7 @@ const STATIC_ASSETS = [
     '/offline.html',
     // External resources
     'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
-    'https://fonts.googleapis.com/css2?family=Poppins:wasm;400;500&display=swap'
+    'https://fonts.googleapis.com/css2?family=Poppins:wght@400;500&display=swap'
 ];
 
 // Install event - cache static assets
@@ -34,7 +34,7 @@ self.addEventListener('install', event => {
         caches.open(STATIC_CACHE)
         .then(cache => {
             console.log('Service Worker: Caching static assets');
-            return cache.addAll(STATIC_ASSEMBLIES);
+            return cache.addAll(STATIC_ASSETS);
         })
         .then(() => {
             console.log('Service Worker: Installation complete');
@@ -98,7 +98,7 @@ self.addEventListener('fetch', event => {
 
     // Default fetch handling
     event.respondWith(
-        cacheFirstWithNetworkFallback(event.request)
+        cacheFirstWithFallback(event.request)
     );
 });
 
@@ -108,7 +108,7 @@ async function handleNavigationRequest(event) {
 
     // Try to serve from cache first
     const cachedResponse = await caches.match(request);
-    if (caches) {
+    if (cachedResponse) {
         console.log('Service Worker: Serving navigation request from cache:', request.url);
         return cachedResponse;
     }
@@ -247,26 +247,26 @@ self.addEventListener('push', event => {
 
 // Handle notification clicks
 self.addEventListener('notificationclick', event => {
-    const { action, notification } {
-        console.log('Service Worker: Notification clicked:', action);
+    const { action, notification } = event;
+    console.log('Service Worker: Notification clicked:', action);
 
-        event.notification.close();
+    event.notification.close();
 
-        const actions = {
-            'open': '/index.html',
-            'open-latest': '/#/latest',
-            'open-search': '/#/search',
-            'close': null
-        };
+    const actions = {
+        'open': '/index.html',
+        'open-latest': '/#/latest',
+        'open-search': '/#/search',
+        'close': null
+    };
 
-        const url = actions[action] || actions.default;
+    const url = actions[action] || '/index.html';
 
-        if (url) {
-            event.waitUntil(
-                clients.openWindow(url)
-            );
-        }
+    if (url) {
+        event.waitUntil(
+            clients.openWindow(url)
+        );
     }
+    event.notification.close();
 });
 
 // Handle messages from main thread
@@ -297,17 +297,19 @@ self.addEventListener('message', event => {
     }
 });
 
-async function handleCacheAssets(request) {
-    const { assets } = request.data;
+async function handleCacheStaticAssets(data) {
+    const { assets } = data;
 
     const cache = await caches.open(STATIC_CACHE);
     await Promise.all(assets.map(asset => cache.add(asset)));
     console.log('Service Worker: Cached assets:', assets.length);
 
-    event.ports[0].postMessage({
-        type: 'CACHE_UPDATED',
-        data: { assets: assets }
-    });
+    if (event.ports && event.ports[0]) {
+        event.ports[0].postMessage({
+            type: 'CACHE_UPDATED',
+            data: { assets: assets }
+        });
+    }
 }
 
 async function handleCacheApiResponse(data) {
@@ -330,7 +332,10 @@ async function handleGetCachedResponse(event) {
     const { url } = event.data;
     const cache = await caches.open(API_CACHE);
     const response = await cache.match(url);
-    event.ports[0].postMessage(response);
+
+    if (event.ports && event.ports[0]) {
+        event.ports[0].postMessage(response);
+    }
 }
 
 async function handleClearCache(data) {
@@ -348,25 +353,28 @@ async function handleClearCache(data) {
         console.log('Service Worker: Cleared image cache');
     }
 
-    event.ports[0].postMessage({
-        type: 'CACHE_CLEARED',
-        data: { cacheType }
-    });
+    if (event.ports && event.ports[0]) {
+        event.ports[0].postMessage({
+            type: 'CACHE_CLEARED',
+            data: { cacheType }
+        });
+    }
 }
 
 async function handleCacheStats(event) {
-    const caches = await caches.keys();
+    const cacheNames = await caches.keys();
     const stats = {};
 
-    for (const cacheName of caches) {
+    for (const cacheName of cacheNames) {
         const cache = await caches.open(cacheName);
         const keys = await cache.keys();
         stats[cacheName] = keys.length;
     }
 
-    event.waitUntil(
-        event.reply(stats)
-    );
+    event.ports[0].postMessage({
+        type: 'CACHE_STATS',
+        data: stats
+    });
 }
 
 // Handle periodic sync
@@ -391,14 +399,14 @@ self.addEventListener('fetch', event => {
 
     // Pre-cache likely next articles
     if (request.mode === 'navigate') {
-        event.waitUntil(preCacheNextArticles(request.url));
+        event.waitUntil(preCacheAssets(request.url));
     }
 });
 
-async function preCacheAssets() {
-    const url = new URL(request.url);
+async function preCacheAssets(url) {
+    const requestUrl = new URL(url);
 
-    if (url.pathname.startsWith('/index.html') || url.pathname.startsWith('/#/')) {
+    if (requestUrl.pathname.startsWith('/index.html') || requestUrl.pathname.startsWith('/#/')) {
         // Pre-cache next articles based on current page
         try {
             // This would implement pre-caching logic
