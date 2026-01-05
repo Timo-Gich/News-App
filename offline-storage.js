@@ -455,15 +455,27 @@ class OfflineStorage {
                     progressCount = progressRequest.result;
                 };
 
-                const offlineRequest = articlesStore.index('savedForOffline').count(IDBKeyRange.only(true));
-                offlineRequest.onsuccess = () => {
-                    offlineCount = offlineRequest.result;
-                };
+                // Safely count offline articles
+                try {
+                    const offlineRequest = articlesStore.index('savedForOffline').count(IDBKeyRange.only(true));
+                    offlineRequest.onsuccess = () => {
+                        offlineCount = offlineRequest.result;
+                    };
+                } catch (error) {
+                    console.warn('Could not count offline articles:', error);
+                    offlineCount = 0;
+                }
 
-                const readRequest = articlesStore.index('read').count(IDBKeyRange.only(true));
-                readRequest.onsuccess = () => {
-                    readCount = readRequest.result;
-                };
+                // Safely count read articles
+                try {
+                    const readRequest = articlesStore.index('read').count(IDBKeyRange.only(true));
+                    readRequest.onsuccess = () => {
+                        readCount = readRequest.result;
+                    };
+                } catch (error) {
+                    console.warn('Could not count read articles:', error);
+                    readCount = 0;
+                }
 
                 transaction.oncomplete = () => {
                     resolve({

@@ -22,6 +22,15 @@ class CacheController {
         }
 
         try {
+            // Clear any existing service workers first
+            if ('serviceWorker' in navigator) {
+                const registrations = await navigator.serviceWorker.getRegistrations();
+                for (const registration of registrations) {
+                    console.log('Unregistering old service worker:', registration.scope);
+                    await registration.unregister();
+                }
+            }
+
             // Register service worker
             this.registration = await navigator.serviceWorker.register('sw.js', {
                 scope: '/',
