@@ -31,8 +31,8 @@ class CacheController {
                 }
             }
 
-            // Register service worker with correct scope for GitHub Pages
-            this.registration = await navigator.serviceWorker.register('./sw.js', {
+            // Register enhanced service worker with robust caching
+            this.registration = await navigator.serviceWorker.register('./sw-enhanced.js', {
                 scope: './',
                 updateViaCache: 'none'
             });

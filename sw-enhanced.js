@@ -1,4 +1,4 @@
-// service-worker.js - Enhanced Service Worker
+// service-worker.js - Enhanced Service Worker with Robust Caching
 const CACHE_VERSION = 'v2.0';
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const API_CACHE = `api-${CACHE_VERSION}`;
@@ -21,7 +21,7 @@ const STATIC_ASSETS = [
     'https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Roboto:wght@300;400;500&display=swap'
 ];
 
-// Install event
+// Install event with robust caching
 self.addEventListener('install', event => {
             console.log('[Service Worker] Installing...');
 
@@ -66,14 +66,6 @@ self.addEventListener('install', event => {
                 }
 
                 console.log(`[Service Worker] Caching complete: ${successCount} successful, ${failureCount} failed`);
-                
-                // Log detailed failure information
-                if (failureCount > 0) {
-                    console.log('[Service Worker] Failed assets:', STATIC_ASSETS.filter((_, index) => {
-                        // This is a simplified check - in a real scenario you'd track individual failures
-                        return false; // Placeholder - actual tracking would be more complex
-                    }));
-                }
             }),
 
             // Skip waiting to activate immediately
