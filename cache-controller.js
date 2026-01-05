@@ -31,9 +31,9 @@ class CacheController {
                 }
             }
 
-            // Register service worker
-            this.registration = await navigator.serviceWorker.register('sw.js', {
-                scope: '/',
+            // Register service worker with correct scope for GitHub Pages
+            this.registration = await navigator.serviceWorker.register('./sw.js', {
+                scope: './',
                 updateViaCache: 'none'
             });
 

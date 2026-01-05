@@ -32,11 +32,16 @@ class CurrentsNewsApp {
 
     // ==================== INITIALIZATION ====================
     async init() {
-        // Set up theme
+        // Set up theme first
         this.setTheme(this.isDarkMode);
 
-        // Initialize offline manager
-        await this.offlineManager.init();
+        // Initialize offline manager with proper error handling
+        try {
+            await this.offlineManager.init();
+            console.log('Offline Manager initialized');
+        } catch (error) {
+            console.warn('Offline Manager initialization failed:', error);
+        }
 
         // Check for saved API key
         const savedKey = localStorage.getItem('currents_api_key');
@@ -55,7 +60,11 @@ class CurrentsNewsApp {
         this.updateDateFilters();
 
         // Update stats
-        await this.offlineManager.updateStats();
+        try {
+            await this.offlineManager.updateStats();
+        } catch (error) {
+            console.warn('Failed to update stats:', error);
+        }
     }
 
     // ==================== THEME MANAGEMENT ====================

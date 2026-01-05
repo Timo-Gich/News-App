@@ -455,22 +455,44 @@ class OfflineStorage {
                     progressCount = progressRequest.result;
                 };
 
-                // Safely count offline articles
+                // Safely count offline articles using cursor instead of .only()
                 try {
-                    const offlineRequest = articlesStore.index('savedForOffline').count(IDBKeyRange.only(true));
-                    offlineRequest.onsuccess = () => {
-                        offlineCount = offlineRequest.result;
+                    const offlineIndex = articlesStore.index('savedForOffline');
+                    let offlineCursorCount = 0;
+                    const offlineCursorRequest = offlineIndex.openCursor();
+
+                    offlineCursorRequest.onsuccess = (event) => {
+                        const cursor = event.target.result;
+                        if (cursor) {
+                            if (cursor.value === true) {
+                                offlineCursorCount++;
+                            }
+                            cursor.continue();
+                        } else {
+                            offlineCount = offlineCursorCount;
+                        }
                     };
                 } catch (error) {
                     console.warn('Could not count offline articles:', error);
                     offlineCount = 0;
                 }
 
-                // Safely count read articles
+                // Safely count read articles using cursor instead of .only()
                 try {
-                    const readRequest = articlesStore.index('read').count(IDBKeyRange.only(true));
-                    readRequest.onsuccess = () => {
-                        readCount = readRequest.result;
+                    const readIndex = articlesStore.index('read');
+                    let readCursorCount = 0;
+                    const readCursorRequest = readIndex.openCursor();
+
+                    readCursorRequest.onsuccess = (event) => {
+                        const cursor = event.target.result;
+                        if (cursor) {
+                            if (cursor.value === true) {
+                                readCursorCount++;
+                            }
+                            cursor.continue();
+                        } else {
+                            readCount = readCursorCount;
+                        }
                     };
                 } catch (error) {
                     console.warn('Could not count read articles:', error);
