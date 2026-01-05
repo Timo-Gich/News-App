@@ -58,6 +58,32 @@ class CurrentsNewsApp {
         await this.offlineManager.updateStats();
     }
 
+    // ==================== THEME MANAGEMENT ====================
+    setTheme(isDarkMode) {
+        this.isDarkMode = isDarkMode;
+
+        // Update body class
+        if (isDarkMode) {
+            document.body.setAttribute('data-theme', 'dark');
+        } else {
+            document.body.removeAttribute('data-theme');
+        }
+
+        // Save preference
+        localStorage.setItem('darkMode', isDarkMode.toString());
+
+        // Update theme toggle button icon
+        const themeToggle = document.querySelector('.theme-toggle i');
+        if (themeToggle) {
+            themeToggle.className = isDarkMode ? 'fas fa-sun' : 'fas fa-moon';
+        }
+    }
+
+    toggleTheme() {
+        this.setTheme(!this.isDarkMode);
+        this.showToast(this.isDarkMode ? 'Dark mode enabled' : 'Light mode enabled', 'info');
+    }
+
     // ==================== EVENT LISTENERS ====================
     setupEventListeners() {
         // Helper function to safely add event listeners
