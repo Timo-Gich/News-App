@@ -17,7 +17,7 @@ class CurrentsNewsApp {
             keywords: ''
         };
         this.articles = [];
-        this.bookmarks = JSON.parse(localStorage.getItem('currents_bookmarks') || '[]');
+        this.bookmarks = JSON.parse(localStorage.getItem('veritas_bookmarks') || '[]');
         this.isDarkMode = localStorage.getItem('darkMode') === 'true';
         this.deferredPrompt = null;
 
@@ -31,7 +31,7 @@ class CurrentsNewsApp {
         this.setTheme(this.isDarkMode);
 
         // Check for saved API key
-        const savedKey = localStorage.getItem('currents_api_key');
+        const savedKey = localStorage.getItem('veritas_api_key');
         if (savedKey) {
             this.apiKey = savedKey;
             this.hideApiKeyModal();
@@ -260,7 +260,7 @@ class CurrentsNewsApp {
             if (!response.ok) {
                 if (response.status === 401) {
                     // Invalid API key
-                    localStorage.removeItem('currents_api_key');
+                    localStorage.removeItem('veritas_api_key');
                     this.apiKey = null;
                     this.showApiKeyModal();
                     this.showToast('Your API key is invalid. Please enter a new one.', 'error');
@@ -839,7 +839,7 @@ class CurrentsNewsApp {
             this.apiKey = key;
             
             if (saveCheckbox?.checked) {
-                localStorage.setItem('currents_api_key', key);
+                localStorage.setItem('veritas_api_key', key);
             }
             
             this.hideApiKeyModal();
@@ -852,7 +852,7 @@ class CurrentsNewsApp {
     }
 
     resetApiKey() {
-        localStorage.removeItem('currents_api_key');
+        localStorage.removeItem('veritas_api_key');
         this.apiKey = null;
         this.showApiKeyModal();
         this.showToast('API key cleared. Please enter a new one.', 'info');
@@ -880,7 +880,7 @@ class CurrentsNewsApp {
         }
         
         // Save to localStorage
-        localStorage.setItem('currents_bookmarks', JSON.stringify(this.bookmarks));
+        localStorage.setItem('veritas_bookmarks', JSON.stringify(this.bookmarks));
         
         // Update modal button
         const bookmarkBtn = document.getElementById('modal-bookmark');
@@ -954,7 +954,7 @@ class CurrentsNewsApp {
                 title: 'Offline Mode Active',
                 description: 'You are currently offline. Previously viewed articles are shown here. Connect to the internet for latest news.',
                 url: '#',
-                author: 'Currents News',
+        author: 'Veritas',
                 image: 'https://images.unsplash.com/photo-1589652717521-10c0d092dea9?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80',
                 language: 'en',
                 category: ['general'],
