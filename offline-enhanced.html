@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Veritas News - Offline</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+         :root {
+            --primary-color: #2563eb;
+            --text-primary: #1f2937;
+            --text-secondary: #6b7280;
+            --bg-color: #f8fafc;
+            --card-bg: #ffffff;
+            --border-color: #e5e7eb;
+        }
+        
+        [data-theme="dark"] {
+            --primary-color: #60a5fa;
+            --text-primary: #f3f4f6;
+            --text-secondary: #9ca3af;
+            --bg-color: #0f172a;
+            --card-bg: #111827;
+            --border-color: #374151;
+        }
+        
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+        
+        .logo {
+            font-size: 3rem;
+            color: var(--primary-color);
+            margin-bottom: 1rem;
+        }
+        
+        .title {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+        
+        .subtitle {
+            font-size: 1.1rem;
+            color: var(--text-secondary);
+        }
+        
+        .status-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+        
+        .status-icon {
+            font-size: 4rem;
+            color: var(--primary-color);
+            margin-bottom: 1rem;
+        }
+        
+        .status-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+        
+        .status-desc {
+            color: var(--text-secondary);
+            margin-bottom: 1.5rem;
+        }
+        
+        .actions {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .btn-primary {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+        
+        .btn-secondary {
+            background-color: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+        }
+        
+        .btn-secondary:hover {
+            background-color: var(--bg-color);
+        }
+        
+        .content-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 2rem;
+        }
+        
+        @media (min-width: 768px) {
+            .content-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+        
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        
+        .card h3 {
+            margin-bottom: 1rem;
+            font-size: 1.25rem;
+        }
+        
+        .offline-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .stat-item {
+            background: var(--bg-color);
+            padding: 1rem;
+            border-radius: 8px;
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary-color);
+            display: block;
+        }
+        
+        .stat-label {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-top: 0.25rem;
+        }
+        
+        .search-box {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+        
+        .search-input {
+            flex: 1;
+            padding: 0.75rem;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 1rem;
+            background: var(--bg-color);
+            color: var(--text-primary);
+        }
+        
+        .search-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+        
+        .articles-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .article-item {
+            display: flex;
+            gap: 1rem;
+            padding: 1rem;
+            border-bottom: 1px solid var(--border-color);
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        .article-item:hover {
+            background-color: var(--bg-color);
+        }
+        
+        .article-item:last-child {
+            border-bottom: none;
+        }
+        
+        .article-image {
+            width: 60px;
+            height: 60px;
+            border-radius: 8px;
+            overflow: hidden;
+            flex-shrink: 0;
+            background-color: var(--bg-color);
+        }
+        
+        .article-image img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        .article-content {
+            flex: 1;
+            min-width: 0;
+        }
+        
+        .article-title {
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .article-meta {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            display: flex;
+            gap: 1rem;
+        }
+        
+        .no-articles {
+            text-align: center;
+            color: var(--text-secondary);
+            padding: 2rem;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background-color: var(--bg-color);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 0.5rem;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background-color: var(--primary-color);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        
+        .footer {
+            text-align: center;
+            margin-top: 3rem;
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+        }
+        
+        .loading {
+            text-align: center;
+            color: var(--text-secondary);
+            padding: 2rem;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem;
+            }
+            .title {
+                font-size: 2rem;
+            }
+            .actions {
+                flex-direction: column;
+                align-items: center;
+            }
+            .btn {
+                width: 100%;
+                max-width: 300px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="logo">
+                <i class="fas fa-newspaper"></i>
+            </div>
+            <h1 class="title">Veritas News</h1>
+            <p class="subtitle">Offline Mode - Reading cached articles</p>
+        </header>
+
+        <div class="status-card">
+            <div class="status-icon">
+                <i class="fas fa-wifi-slash"></i>
+            </div>
+            <h2 class="status-title">You're Offline</h2>
+            <p class="status-desc">
+                No internet connection detected. You can still read cached articles and manage your offline content.
+            </p>
+            <div class="actions">
+                <button class="btn btn-primary" onclick="window.location.href='/'">
+                    <i class="fas fa-home"></i> Return to App
+                </button>
+                <button class="btn btn-secondary" onclick="checkConnection()">
+                    <i class="fas fa-sync"></i> Check Connection
+                </button>
+            </div>
+        </div>
+
+        <div class="content-grid">
+            <div class="card">
+                <h3><i class="fas fa-chart-bar"></i> Storage Status</h3>
+                <div class="offline-stats">
+                    <div class="stat-item">
+                        <span class="stat-value" id="stat-articles">0</span>
+                        <span class="stat-label">Articles</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value" id="stat-bookmarks">0</span>
+                        <span class="stat-label">Bookmarks</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value" id="stat-storage">0</span>
+                        <span class="stat-label">Storage Used</span>
+                    </div>
+                </div>
+                <div>
+                    <label>Storage Usage</label>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="storage-progress"></div>
+                    </div>
+                    <small id="storage-text">0% used</small>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3><i class="fas fa-search"></i> Search Offline Articles</h3>
+                <div class="search-box">
+                    <input type="text" id="offline-search" class="search-input" placeholder="Search cached articles...">
+                    <button class="btn btn-primary" onclick="searchOfflineArticles()">
+                        <i class="fas fa-search"></i> Search
+                    </button>
+                </div>
+                <div class="articles-list" id="offline-articles">
+                    <div class="loading">Loading cached articles...</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card" style="margin-top: 2rem;">
+            <h3><i class="fas fa-info-circle"></i> What You Can Do Offline</h3>
+            <ul style="margin-top: 1rem; padding-left: 1.5rem;">
+                <li style="margin-bottom: 0.5rem;">Read cached articles</li>
+                <li style="margin-bottom: 0.5rem;">Search through saved content</li>
+                <li style="margin-bottom: 0.5rem;">Manage bookmarks</li>
+                <li style="margin-bottom: 0.5rem;">View reading progress</li>
+                <li style="margin-bottom: 0.5rem;">Access offline settings</li>
+            </ul>
+            <p style="margin-top: 1rem; color: var(--text-secondary); font-size: 0.9rem;">
+                <i class="fas fa-lightbulb"></i> Tip: Save articles for offline reading when you're back online to access them later.
+            </p>
+        </div>
+
+        <div class="footer">
+            <p>Veritas News PWA - Built with Progressive Web App technology</p>
+            <p style="margin-top: 0.5rem;">When you reconnect to the internet, your offline actions will sync automatically.</p>
+        </div>
+    </div>
+
+    <script>
+        // Enhanced offline page functionality
+        let offlineManager = null;
+        let currentArticles = [];
+
+        // Initialize when DOM is loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            initOfflinePage();
+        });
+
+        async function initOfflinePage() {
+            try {
+                // Initialize offline manager
+                if (typeof OfflineManager !== 'undefined') {
+                    offlineManager = new OfflineManager();
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+
+                // Load offline data
+                await loadOfflineData();
+
+                // Set up event listeners
+                setupEventListeners();
+
+            } catch (error) {
+                console.error('Error initializing offline page:', error);
+                showErrorMessage('Failed to load offline data');
+            }
+        }
+
+        async function loadOfflineData() {
+            try {
+                // Load articles
+                const articles = await getOfflineArticles();
+                currentArticles = articles;
+                displayArticles(articles);
+
+                // Load stats
+                await updateStats();
+
+                // Set up periodic updates
+                setInterval(updateStats, 30000); // Update every 30 seconds
+
+            } catch (error) {
+                console.error('Error loading offline data:', error);
+                showErrorMessage('Failed to load offline articles');
+            }
+        }
+
+        async function getOfflineArticles() {
+            if (offlineManager && offlineManager.offlineStorage) {
+                return await offlineManager.offlineStorage.getAllArticles();
+            }
+
+            // Fallback to localStorage if available
+            const articles = localStorage.getItem('veritas_offline_articles');
+            return articles ? JSON.parse(articles) : [];
+        }
+
+        function displayArticles(articles) {
+            const container = document.getElementById('offline-articles');
+
+            if (articles.length === 0) {
+                container.innerHTML = `
+                    <div class="no-articles">
+                        <i class="fas fa-inbox" style="font-size: 3rem; color: var(--text-secondary); margin-bottom: 1rem;"></i>
+                        <h4>No cached articles</h4>
+                        <p>Save articles for offline reading when you're back online.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = articles.map(article => `
+                <div class="article-item" onclick="openArticle('${article.id}')">
+                    <div class="article-image">
+                        ${article.image && article.image !== "None" ? 
+                            `<img src="${article.image}" alt="${article.title}">` : 
+                            `<div style="background: var(--bg-color); width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;">
+                                <i class="fas fa-newspaper" style="color: var(--text-secondary);"></i>
+                            </div>`
+                        }
+                    </div>
+                    <div class="article-content">
+                        <h4 class="article-title">${truncateText(article.title, 60)}</h4>
+                        <div class="article-meta">
+                            <span><i class="fas fa-clock"></i> ${formatDate(article.published)}</span>
+                            <span><i class="fas fa-tag"></i> ${article.category ? article.category[0] : 'General'}</span>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function updateStats() {
+            try {
+                let articlesCount = 0;
+                let bookmarksCount = 0;
+                let storageUsed = 0;
+
+                if (offlineManager) {
+                    const articles = await offlineManager.getOfflineArticles();
+                    const bookmarks = await offlineManager.getBookmarks();
+                    
+                    articlesCount = articles.length;
+                    bookmarksCount = bookmarks.length;
+                    storageUsed = articles.length + bookmarks.length;
+                } else {
+                    // Fallback stats
+                    articlesCount = JSON.parse(localStorage.getItem('veritas_offline_articles') || '[]').length;
+                    bookmarksCount = JSON.parse(localStorage.getItem('veritas_bookmarks') || '[]').length;
+                    storageUsed = articlesCount + bookmarksCount;
+                }
+
+                // Update DOM
+                document.getElementById('stat-articles').textContent = articlesCount;
+                document.getElementById('stat-bookmarks').textContent = bookmarksCount;
+                document.getElementById('stat-storage').textContent = storageUsed;
+
+                // Update progress bar (assuming max 1000 items)
+                const percentage = Math.min((storageUsed / 1000) * 100, 100);
+                const progressBar = document.getElementById('storage-progress');
+                const progressText = document.getElementById('storage-text');
+                
+                progressBar.style.width = `${percentage}%`;
+                progressText.textContent = `${Math.round(percentage)}% used`;
+
+                // Color coding
+                if (percentage > 80) {
+                    progressBar.style.backgroundColor = '#ef4444';
+                } else if (percentage > 60) {
+                    progressBar.style.backgroundColor = '#f59e0b';
+                } else {
+                    progressBar.style.backgroundColor = '#10b981';
+                }
+
+            } catch (error) {
+                console.error('Error updating stats:', error);
+            }
+        }
+
+        function setupEventListeners() {
+            const searchInput = document.getElementById('offline-search');
+            searchInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    searchOfflineArticles();
+                }
+            });
+        }
+
+        async function searchOfflineArticles() {
+            const query = document.getElementById('offline-search').value.trim();
+            
+            if (!query) {
+                displayArticles(currentArticles);
+                return;
+            }
+
+            try {
+                let results = [];
+                
+                if (offlineManager) {
+                    results = await offlineManager.searchOfflineArticles(query);
+                } else {
+                    // Simple client-side search
+                    results = currentArticles.filter(article => 
+                        article.title.toLowerCase().includes(query.toLowerCase()) ||
+                        (article.description && article.description.toLowerCase().includes(query.toLowerCase()))
+                    );
+                }
+
+                displayArticles(results);
+                
+                // Show search result message
+                const container = document.getElementById('offline-articles');
+                if (results.length === 0) {
+                    container.innerHTML = `
+                        <div class="no-articles">
+                            <i class="fas fa-search" style="font-size: 3rem; color: var(--text-secondary); margin-bottom: 1rem;"></i>
+                            <h4>No results found</h4>
+                            <p>No articles match your search: "${query}"</p>
+                        </div>
+                    `;
+                }
+
+            } catch (error) {
+                console.error('Error searching articles:', error);
+                showErrorMessage('Search failed');
+            }
+        }
+
+        function openArticle(articleId) {
+            // Try to get article from offline storage
+            if (offlineManager) {
+                offlineManager.offlineStorage.getArticle(articleId).then(article => {
+                    if (article) {
+                        // Open in new window/tab
+                        const articleUrl = `/article.html?id=${articleId}`;
+                        window.open(articleUrl, '_blank');
+                    } else {
+                        showErrorMessage('Article not found');
+                    }
+                });
+            } else {
+                showErrorMessage('Cannot open article offline');
+            }
+        }
+
+        function checkConnection() {
+            if (navigator.onLine) {
+                window.location.href = '/';
+            } else {
+                showErrorMessage('Still offline. Please check your connection.');
+            }
+        }
+
+        function showErrorMessage(message) {
+            const container = document.createElement('div');
+            container.className = 'status-card';
+            container.style.borderColor = '#ef4444';
+            container.innerHTML = `
+                <div class="status-icon" style="color: #ef4444;">
+                    <i class="fas fa-exclamation-triangle"></i>
+                </div>
+                <h2 class="status-title" style="color: #ef4444;">${message}</h2>
+                <p class="status-desc">Please try again or check your connection.</p>
+            `;
+            
+            document.querySelector('.container').appendChild(container);
+            
+            // Remove after 3 seconds
+            setTimeout(() => {
+                container.remove();
+            }, 3000);
+        }
+
+        // Utility functions
+        function truncateText(text, maxLength) {
+            if (!text) return '';
+            if (text.length <= maxLength) return text;
+            return text.substring(0, maxLength) + '...';
+        }
+
+        function formatDate(dateString) {
+            try {
+                const date = new Date(dateString);
+                return date.toLocaleDateString();
+            } catch (error) {
+                return 'Unknown date';
+            }
+        }
+
+        // Handle online/offline events
+        window.addEventListener('online', () => {
+            const message = document.createElement('div');
+            message.className = 'status-card';
+            message.style.borderColor = '#10b981';
+            message.innerHTML = `
+                <div class="status-icon" style="color: #10b981;">
+                    <i class="fas fa-wifi"></i>
+                </div>
+                <h2 class="status-title" style="color: #10b981;">Back Online!</h2>
+                <p class="status-desc">You're now connected to the internet.</p>
+                <div class="actions">
+                    <button class="btn btn-primary" onclick="window.location.href='/'">
+                        <i class="fas fa-refresh"></i> Refresh App
+                    </button>
+                </div>
+            `;
+            
+            document.querySelector('.container').appendChild(message);
+            
+            // Remove after 5 seconds
+            setTimeout(() => {
+                message.remove();
+            }, 5000);
+        });
+
+        window.addEventListener('offline', () => {
+            // Already handled by the offline page itself
+        });
+    </script>
+</body>
+
+</html>

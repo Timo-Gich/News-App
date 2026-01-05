@@ -20,13 +20,20 @@ class CurrentsNewsApp {
         this.bookmarks = JSON.parse(localStorage.getItem('veritas_bookmarks') || '[]');
         this.isDarkMode = localStorage.getItem('darkMode') === 'true';
         this.deferredPrompt = null;
+        this.offlineManager = null;
 
         // Initialize the app
         this.init();
     }
 
     // ==================== INITIALIZATION ====================
-    init() {
+    async init() {
+        // Initialize offline manager first
+        this.offlineManager = new OfflineManager();
+
+        // Wait for offline manager to initialize
+        await new Promise(resolve => setTimeout(resolve, 100));
+
         // Set up theme
         this.setTheme(this.isDarkMode);
 
@@ -48,6 +55,414 @@ class CurrentsNewsApp {
 
         // Register service worker
         this.registerServiceWorker();
+
+        // Initialize offline UI elements
+        this.initializeOfflineUI();
+    }
+
+    // ==================== OFFLINE UI INITIALIZATION ====================
+    initializeOfflineUI() {
+        // Add storage usage indicator to header
+        this.addStorageUsageIndicator();
+
+        // Update existing article cards with offline indicators
+        this.updateExistingCardsWithOfflineIndicators();
+
+        // Set up offline management panel
+        this.setupOfflineManagementPanel();
+
+        // Update UI based on offline manager state
+        if (this.offlineManager) {
+            this.updateUIState();
+        }
+    }
+
+    addStorageUsageIndicator() {
+        // Add storage usage indicator to header
+        const headerControls = document.querySelector('.header-controls');
+        if (headerControls) {
+            const storageContainer = document.createElement('div');
+            storageContainer.id = 'storage-indicator';
+            storageContainer.className = 'storage-indicator';
+            storageContainer.innerHTML = `
+                <div class="storage-info">
+                    <span id="storage-usage-text">0 items stored</span>
+                    <div class="storage-bar">
+                        <div id="storage-usage-bar" class="storage-usage-bar"></div>
+                    </div>
+                </div>
+            `;
+
+            // Insert before the theme toggle
+            const themeToggle = document.querySelector('.theme-toggle');
+            if (themeToggle) {
+                headerControls.insertBefore(storageContainer, themeToggle);
+            } else {
+                headerControls.appendChild(storageContainer);
+            }
+        }
+    }
+
+    updateExistingCardsWithOfflineIndicators() {
+        // Add offline indicators to existing article cards
+        const cards = document.querySelectorAll('.news-card');
+        cards.forEach(card => {
+            this.addOfflineIndicatorToCard(card);
+        });
+    }
+
+    addOfflineIndicatorToCard(card) {
+        // Add offline availability badge
+        const meta = card.querySelector('.news-meta');
+        if (meta) {
+            const offlineBadge = document.createElement('span');
+            offlineBadge.className = 'offline-badge';
+            offlineBadge.innerHTML = '<i class="fas fa-download"></i> Save for Offline';
+            offlineBadge.title = 'Save this article for offline reading';
+
+            // Make it clickable
+            offlineBadge.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const articleId = card.getAttribute('data-article-id');
+                if (articleId) {
+                    this.saveArticleForOffline(articleId);
+                }
+            });
+
+            meta.appendChild(offlineBadge);
+        }
+    }
+
+    setupOfflineManagementPanel() {
+        // Add offline management panel button
+        const headerControls = document.querySelector('.header-controls');
+        if (headerControls) {
+            const offlineBtn = document.createElement('button');
+            offlineBtn.id = 'offline-btn';
+            offlineBtn.className = 'btn btn-secondary offline-btn';
+            offlineBtn.innerHTML = '<i class="fas fa-cloud-download-alt"></i> Offline';
+            offlineBtn.title = 'Manage offline articles';
+
+            offlineBtn.addEventListener('click', () => {
+                this.showOfflineManagementPanel();
+            });
+
+            headerControls.appendChild(offlineBtn);
+        }
+    }
+
+    updateUIState() {
+        if (this.offlineManager) {
+            const status = this.offlineManager.getOfflineStatus();
+
+            // Update online status
+            const statusElement = document.getElementById('online-status');
+            if (statusElement) {
+                if (status.isOnline) {
+                    statusElement.className = 'online-status online';
+                    statusElement.innerHTML = '<i class="fas fa-wifi"></i> Online';
+                } else {
+                    statusElement.className = 'online-status offline';
+                    statusElement.innerHTML = '<i class="fas fa-wifi-slash"></i> Offline';
+                }
+            }
+
+            // Update storage usage
+            if (status.storageUsage) {
+                this.updateStorageUI(status.storageUsage);
+            }
+        }
+    }
+
+    updateStorageUI(storageUsage) {
+        const storageBar = document.getElementById('storage-usage-bar');
+        const storageText = document.getElementById('storage-usage-text');
+
+        if (storageBar && storageText) {
+            const totalItems = storageUsage.totalSize || 0;
+            const percentage = Math.min((totalItems / 100) * 100, 100);
+
+            storageBar.style.width = `${percentage}%`;
+            storageText.textContent = `${totalItems} items stored`;
+
+            // Color coding
+            if (percentage > 80) {
+                storageBar.style.backgroundColor = '#ef4444'; // Red
+            } else if (percentage > 60) {
+                storageBar.style.backgroundColor = '#f59e0b'; // Orange
+            } else {
+                storageBar.style.backgroundColor = '#10b981'; // Green
+            }
+        }
+    }
+
+    // ==================== OFFLINE FUNCTIONALITY ====================
+    async saveArticleForOffline(articleId) {
+        try {
+            // Find the article in current articles
+            const article = this.articles.find(a => a.id === articleId);
+            if (!article) {
+                this.showToast('Article not found', 'error');
+                return;
+            }
+
+            // Save to offline storage
+            const success = await this.offlineManager.saveArticleForOffline(article);
+
+            if (success) {
+                // Update UI indicator
+                this.updateOfflineIndicator(articleId, true);
+            }
+        } catch (error) {
+            console.error('Error saving article for offline:', error);
+            this.showToast('Failed to save article for offline reading', 'error');
+        }
+    }
+
+    updateOfflineIndicator(articleId, isSaved) {
+        // Update the offline badge on the article card
+        const badge = document.querySelector(`[data-article-id="${articleId}"] .offline-badge`);
+        if (badge) {
+            if (isSaved) {
+                badge.innerHTML = '<i class="fas fa-check-circle"></i> Saved';
+                badge.className = 'offline-badge saved';
+                badge.title = 'Article saved for offline reading';
+            }
+        }
+    }
+
+    async showOfflineManagementPanel() {
+        // Create offline management panel
+        const panel = document.createElement('div');
+        panel.id = 'offline-panel';
+        panel.className = 'offline-panel';
+
+        panel.innerHTML = `
+            <div class="offline-panel-header">
+                <h3><i class="fas fa-cloud-download-alt"></i> Offline Articles</h3>
+                <button class="btn btn-close" onclick="newsApp.hideOfflineManagementPanel()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="offline-panel-content">
+                <div class="offline-stats">
+                    <div class="stat-item">
+                        <span class="stat-label">Total Articles</span>
+                        <span id="offline-article-count" class="stat-value">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Bookmarks</span>
+                        <span id="offline-bookmark-count" class="stat-value">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Storage Used</span>
+                        <span id="offline-storage-used" class="stat-value">0</span>
+                    </div>
+                </div>
+                
+                <div class="offline-search">
+                    <input type="text" id="offline-search-input" placeholder="Search offline articles..." />
+                    <button id="offline-search-btn" class="btn btn-primary">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </div>
+                
+                <div id="offline-articles-list" class="offline-articles-list">
+                    <div class="loading">Loading offline articles...</div>
+                </div>
+                
+                <div class="offline-actions">
+                    <button id="clear-offline-data" class="btn btn-danger">
+                        <i class="fas fa-trash"></i> Clear All
+                    </button>
+                    <button id="cleanup-old-data" class="btn btn-secondary">
+                        <i class="fas fa-broom"></i> Cleanup
+                    </button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(panel);
+
+        // Load offline articles
+        this.loadOfflineArticles();
+
+        // Set up event listeners
+        this.setupOfflinePanelListeners();
+    }
+
+    hideOfflineManagementPanel() {
+        const panel = document.getElementById('offline-panel');
+        if (panel) {
+            panel.remove();
+        }
+    }
+
+    setupOfflinePanelListeners() {
+        const searchBtn = document.getElementById('offline-search-btn');
+        if (searchBtn) {
+            searchBtn.addEventListener('click', () => this.searchOfflineArticles());
+        }
+
+        const clearBtn = document.getElementById('clear-offline-data');
+        if (clearBtn) {
+            clearBtn.addEventListener('click', () => this.confirmClearOfflineData());
+        }
+
+        const cleanupBtn = document.getElementById('cleanup-old-data');
+        if (cleanupBtn) {
+            cleanupBtn.addEventListener('click', () => this.cleanupOldData());
+        }
+    }
+
+    async loadOfflineArticles() {
+        try {
+            const offlineArticles = await this.offlineManager.getOfflineArticles();
+            const bookmarks = await this.offlineManager.getBookmarks();
+
+            // Update stats
+            this.updateOfflineStats(offlineArticles.length, bookmarks.length);
+
+            // Display articles
+            this.displayOfflineArticles(offlineArticles, bookmarks);
+        } catch (error) {
+            console.error('Error loading offline articles:', error);
+            this.showToast('Failed to load offline articles', 'error');
+        }
+    }
+
+    updateOfflineStats(articleCount, bookmarkCount) {
+        document.getElementById('offline-article-count').textContent = articleCount;
+        document.getElementById('offline-bookmark-count').textContent = bookmarkCount;
+
+        // Get storage usage
+        if (this.offlineManager) {
+            const usage = this.offlineManager.storageUsage;
+            document.getElementById('offline-storage-used').textContent = `${usage.totalSize} items`;
+        }
+    }
+
+    displayOfflineArticles(articles, bookmarks) {
+        const listContainer = document.getElementById('offline-articles-list');
+        if (!listContainer) return;
+
+        if (articles.length === 0) {
+            listContainer.innerHTML = `
+                <div class="no-offline-articles">
+                    <i class="fas fa-inbox" style="font-size: 48px; color: var(--text-secondary); margin-bottom: 16px;"></i>
+                    <h4>No offline articles</h4>
+                    <p>No articles saved for offline reading. Use the "Save for Offline" button on articles to save them for later.</p>
+                </div>
+            `;
+            return;
+        }
+
+        listContainer.innerHTML = articles.map(article => {
+            const isBookmarked = bookmarks.some(b => b.article_id === article.id);
+
+            return `
+                <div class="offline-article-item">
+                    <div class="offline-article-content">
+                        <h4>${this.truncateText(article.title, 80)}</h4>
+                        <p class="offline-article-description">${this.truncateText(article.description || '', 150)}</p>
+                        <div class="offline-article-meta">
+                            <span class="offline-article-category">${article.category ? article.category[0] : 'General'}</span>
+                            <span class="offline-article-date">${new Date(article.published).toLocaleDateString()}</span>
+                        </div>
+                    </div>
+                    <div class="offline-article-actions">
+                        <button class="btn btn-sm btn-primary" onclick="newsApp.openArticle('${article.id}')">
+                            <i class="fas fa-eye"></i> Read
+                        </button>
+                        <button class="btn btn-sm ${isBookmarked ? 'btn-danger' : 'btn-secondary'}" onclick="newsApp.toggleBookmark('${article.id}', ${isBookmarked})">
+                            <i class="fas fa-${isBookmarked ? 'bookmark' : 'bookmarks'}"></i>
+                        </button>
+                        <button class="btn btn-sm btn-danger" onclick="newsApp.removeArticleFromOffline('${article.id}')">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    async searchOfflineArticles() {
+        const searchInput = document.getElementById('offline-search-input');
+        const query = searchInput.value.trim();
+
+        if (!query) {
+            this.showToast('Please enter a search term', 'warning');
+            return;
+        }
+
+        try {
+            const results = await this.offlineManager.searchOfflineArticles(query);
+            const bookmarks = await this.offlineManager.getBookmarks();
+
+            // Update stats
+            this.updateOfflineStats(results.length, bookmarks.length);
+
+            // Display results
+            this.displayOfflineArticles(results, bookmarks);
+
+            this.showToast(`Found ${results.length} articles for "${query}"`, 'success');
+        } catch (error) {
+            console.error('Error searching offline articles:', error);
+            this.showToast('Failed to search offline articles', 'error');
+        }
+    }
+
+    async openArticle(articleId) {
+        // Find article in offline storage and open it
+        const article = await this.offlineManager.offlineStorage.getArticle(articleId);
+        if (article) {
+            this.showArticleModal(article);
+        } else {
+            this.showToast('Article not found', 'error');
+        }
+    }
+
+    async removeArticleFromOffline(articleId) {
+        try {
+            const success = await this.offlineManager.removeArticleFromOffline(articleId);
+            if (success) {
+                this.loadOfflineArticles();
+                this.showToast('Article removed from offline storage', 'success');
+            }
+        } catch (error) {
+            console.error('Error removing article:', error);
+            this.showToast('Failed to remove article', 'error');
+        }
+    }
+
+    confirmClearOfflineData() {
+        if (confirm('Are you sure you want to clear all offline data? This will remove all saved articles and bookmarks.')) {
+            this.clearAllOfflineData();
+        }
+    }
+
+    async clearAllOfflineData() {
+        try {
+            const success = await this.offlineManager.clearAllOfflineData();
+            if (success) {
+                this.loadOfflineArticles();
+                this.updateStorageUI({ articles: 0, bookmarks: 0, queue: 0, totalSize: 0 });
+                this.showToast('All offline data cleared', 'success');
+            }
+        } catch (error) {
+            console.error('Error clearing offline data:', error);
+            this.showToast('Failed to clear offline data', 'error');
+        }
+    }
+
+    async cleanupOldData() {
+        try {
+            await this.offlineManager.cleanupOldData();
+            this.showToast('Old data cleaned up', 'success');
+        } catch (error) {
+            console.error('Error cleaning up old data:', error);
+            this.showToast('Failed to clean up old data', 'error');
+        }
     }
 
     // ==================== EVENT LISTENERS ====================
@@ -967,10 +1382,10 @@ class CurrentsNewsApp {
     registerServiceWorker() {
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js')
-                navigator.serviceWorker.register('./sw.js')
+                // Register enhanced service worker
+                navigator.serviceWorker.register('/sw-enhanced.js')
                     .then(registration => {
-                        console.log('Service Worker registered with scope:', registration.scope);
+                        console.log('Enhanced Service Worker registered with scope:', registration.scope);
                         
                         // Check for updates
                         registration.addEventListener('updatefound', () => {
@@ -989,7 +1404,16 @@ class CurrentsNewsApp {
                         
                     })
                     .catch(error => {
-                        console.log('Service Worker registration failed:', error);
+                        console.log('Enhanced Service Worker registration failed:', error);
+                        
+                        // Fallback to original service worker
+                        navigator.serviceWorker.register('/sw.js')
+                            .then(registration => {
+                                console.log('Original Service Worker registered as fallback:', registration.scope);
+                            })
+                            .catch(fallbackError => {
+                                console.log('Fallback Service Worker registration also failed:', fallbackError);
+                            });
                     });
             });
         }
