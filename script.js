@@ -1034,16 +1034,123 @@ class CurrentsNewsApp {
         document.querySelector(`[data-category="${category}"]`).classList.add('active');
     }
 
-    loadCategoryNews(category) {
-        // This method needs to be implemented
-        console.log(`Loading ${category} news...`);
-        // Implementation would go here
+    async loadCategoryNews(category) {
+        this.currentCategory = category;
+        this.showLoading();
+        
+        try {
+            // Build API URL
+            const url = this.buildApiUrl(category);
+            console.log('Fetching news from:', url);
+            
+            // Make API request
+            const data = await this.makeApiRequest(url);
+            
+            if (data && data.news) {
+                this.articles = data.news;
+                this.currentPage = 1;
+                this.totalPages = Math.ceil(this.articles.length / this.pageSize);
+                
+                this.renderArticles();
+                this.hideLoading();
+                this.updateStats();
+                
+                this.showToast(`Loaded ${this.articles.length} articles`, 'success');
+            } else {
+                throw new Error('No news data received');
+            }
+        } catch (error) {
+            console.error('Failed to load category news:', error);
+            this.hideLoading();
+            this.showError('Failed to load news: ' + error.message);
+        }
     }
 
-    loadArticles() {
-        // This method needs to be implemented
-        console.log('Loading articles...');
-        // Implementation would be added here
+    buildApiUrl(category) {
+        let url = `${this.baseUrl}/latest-news?language=${this.currentLanguage}`;
+        
+        // Add API key
+        if (this.apiKey) {
+            url += `&apiKey=${this.apiKey}`;
+        }
+        
+        // Add category if not 'latest'
+        if (category && category !== 'latest') {
+            url += `&category=${encodeURIComponent(category)}`;
+        }
+        
+        // Add date range for historical news
+        if (this.filters.start_date && this.filters.end_date) {
+            url += `&start_date=${this.filters.start_date}&end_date=${this.filters.end_date}`;
+        }
+        
+        // Add other filters
+        if (this.filters.domain) {
+            url += `&domain=${encodeURIComponent(this.filters.domain)}`;
+        }
+        
+        if (this.filters.keywords) {
+            url += `&keywords=${encodeURIComponent(this.filters.keywords)}`;
+        }
+        
+        return url;
+    }
+
+    async loadArticles() {
+        // This method loads the current page of articles
+        const startIndex = (this.currentPage - 1) * this.pageSize;
+        const endIndex = startIndex + this.pageSize;
+        const pageArticles = this.articles.slice(startIndex, endIndex);
+        
+        this.renderArticles(pageArticles);
+        this.updatePagination();
+    }
+
+    renderArticles(articles = null) {
+        const container = document.getElementById('news-grid');
+        if (!container) return;
+
+        // Use current articles if not provided
+        const articlesToRender = articles || this.articles;
+        
+        // Calculate pagination for current articles
+        this.totalPages = Math.ceil(articlesToRender.length / this.pageSize);
+        const startIndex = (this.currentPage - 1) * this.pageSize;
+        const endIndex = startIndex + this.pageSize;
+        const pageArticles = articlesToRender.slice(startIndex, endIndex);
+
+        container.innerHTML = '';
+
+        if (pageArticles.length === 0) {
+            container.innerHTML = `
+                <div class="no-articles" style="text-align: center; padding: 40px 20px;">
+                    <i class="fas fa-newspaper" style="font-size: 48px; color: var(--text-secondary); margin-bottom: 15px;"></i>
+                    <h3>No articles found</h3>
+                    <p>Try adjusting your search or filters.</p>
+                </div>
+            `;
+            return;
+        }
+
+        pageArticles.forEach(article => {
+            const card = this.createArticleCard(article);
+            container.appendChild(card);
+        });
+
+        this.updatePagination();
+    }
+
+    updatePagination() {
+        const prevBtn = document.getElementById('prev-page');
+        const nextBtn = document.getElementById('next-page');
+        const pageInfo = document.getElementById('page-info');
+
+        if (prevBtn && nextBtn && pageInfo) {
+            prevBtn.disabled = this.currentPage === 1;
+            nextBtn.disabled = this.currentPage === this.totalPages;
+            
+            pageInfo.textContent = `Page ${this.currentPage} of ${this.totalPages}`;
+        }
     }
 
     updateDateFilters() {
@@ -1127,10 +1234,44 @@ class CurrentsNewsApp {
         console.log('Performing historical search...');
     }
 
-    fetchHistoricalNews(query, filters) {
-        // This method needs to be implemented
-        // This would make API calls to Currents API
-        return Promise.resolve([]);
+    async fetchHistoricalNews(query, filters) {
+        try {
+            // Build historical search URL
+            let url = `${this.baseUrl}/search?language=${this.currentLanguage}&keywords=${encodeURIComponent(query)}`;
+            
+            // Add API key
+            if (this.apiKey) {
+                url += `&apiKey=${this.apiKey}`;
+            }
+            
+            // Add date range
+            if (filters.start_date && filters.end_date) {
+                url += `&start_date=${filters.start_date}&end_date=${filters.end_date}`;
+            }
+            
+            // Add other filters
+            if (filters.domain) {
+                url += `&domain=${encodeURIComponent(filters.domain)}`;
+            }
+            
+            if (filters.category) {
+                url += `&category=${encodeURIComponent(filters.category)}`;
+            }
+            
+            console.log('Fetching historical news from:', url);
+            
+            // Make API request
+            const data = await this.makeApiRequest(url);
+            
+            if (data && data.news) {
+                return data.news;
+            } else {
+                throw new Error('No historical news data received');
+            }
+        } catch (error) {
+            console.error('Failed to fetch historical news:', error);
+            throw error;
+        }
     }
 
     truncateText(text, limit) {
