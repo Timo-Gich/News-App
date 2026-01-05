@@ -84,6 +84,85 @@ class CurrentsNewsApp {
         this.showToast(this.isDarkMode ? 'Dark mode enabled' : 'Light mode enabled', 'info');
     }
 
+    // ==================== MODAL METHODS ====================
+    showApiKeyModal() {
+        document.getElementById('api-key-modal').classList.add('show');
+    }
+
+    hideApiKeyModal() {
+        document.getElementById('api-key-modal').classList.remove('show');
+    }
+
+    hideArticleModal() {
+        document.getElementById('article-modal').classList.remove('show');
+    }
+
+    showArticleModal(article) {
+        // Set current article ID on modal for offline saving
+        const modal = document.getElementById('article-modal');
+        modal.dataset.currentArticleId = article.id;
+
+        // Format date
+        const date = new Date(article.published);
+        const formattedDate = date.toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+
+        // Get domain from URL
+        let domain = 'Unknown Source';
+        try {
+            if (article.url) {
+                domain = new URL(article.url).hostname.replace('www.', '');
+            }
+        } catch (e) {
+            console.log('Invalid URL:', article.url);
+        }
+
+        // Get categories
+        const categories = article.category && article.category.length > 0 ?
+            article.category.join(', ') :
+            'General';
+
+        // Update modal content
+        document.getElementById('modal-title').textContent = article.title;
+        document.getElementById('modal-source').innerHTML = `<i class="fas fa-globe"></i> ${domain}`;
+        document.getElementById('modal-date').innerHTML = `<i class="far fa-clock"></i> ${formattedDate}`;
+        document.getElementById('modal-author').innerHTML = article.author ?
+            `<i class="fas fa-user"></i> ${article.author}` :
+            `<i class="fas fa-user"></i> Unknown Author`;
+        document.getElementById('modal-category').innerHTML = `<i class="fas fa-tag"></i> ${categories}`;
+
+        // Update modal image
+        const modalImage = document.getElementById('modal-image');
+        if (article.image && article.image !== "None") {
+            modalImage.src = article.image;
+            modalImage.alt = article.title;
+            modalImage.style.display = 'block';
+        } else {
+            modalImage.style.display = 'none';
+        }
+
+        document.getElementById('modal-description').textContent =
+            article.description || 'No description available for this article.';
+
+        document.getElementById('modal-read-full').href = article.url;
+
+        // Show modal
+        document.getElementById('article-modal').classList.add('show');
+    }
+
+    showInstallButton() {
+        document.getElementById('install-btn').style.display = 'flex';
+    }
+
+    hideInstallButton() {
+        document.getElementById('install-btn').style.display = 'none';
+    }
+
     // ==================== EVENT LISTENERS ====================
     setupEventListeners() {
         // Helper function to safely add event listeners
@@ -931,6 +1010,123 @@ class CurrentsNewsApp {
         // This would check the cache controller for cached API responses
         // For now, return empty array
         return [];
+    }
+
+    // Additional missing methods that are referenced elsewhere
+    loadLatestNews() {
+        this.loadCategoryNews('latest');
+    }
+
+    setActiveCategory(category) {
+        this.currentCategory = category;
+        document.querySelectorAll('.nav-link').forEach(link => {
+            link.classList.remove('active');
+        });
+        document.querySelector(`[data-category="${category}"]`).classList.add('active');
+    }
+
+    loadCategoryNews(category) {
+        // This method needs to be implemented
+        console.log(`Loading ${category} news...`);
+        // Implementation would go here
+    }
+
+    loadArticles() {
+        // This method needs to be implemented
+        console.log('Loading articles...');
+        // Implementation would be added here
+    }
+
+    updateDateFilters() {
+        // This method needs to be implemented
+        // Set up date filters UI
+    }
+
+    applyFilters() {
+        // This method needs to be implemented
+        console.log('Applying filters...');
+    }
+
+    clearFilters() {
+        // This function needs to be implemented
+        console.log('Clearing filters...');
+    }
+
+    showLoading() {
+        document.getElementById('loading').style.display = 'flex';
+    }
+
+    hideLoading() {
+        document.getElementById('loading').style.display = 'none';
+    }
+
+    showError(message) {
+        document.getElementById('error-message').textContent = message;
+        document.getElementById('error-container').style.display = 'block';
+    }
+
+    shareArticle(article) {
+        // This method needs to be implemented
+        console.log('Sharing article:', article.title);
+    }
+
+    installPWA() {
+        if (this.deferredPrompt) {
+            this.deferredPrompt.prompt();
+            this.deferredPrompt.userChoice.then((choiceResult) => {
+                if (choiceResult.outcome === 'accepted') {
+                    this.showToast('PWA installed successfully!', 'success');
+                }
+                this.deferredPrompt = null;
+                this.hideInstallButton();
+            });
+        }
+    }
+
+    saveApiKey() {
+        const apiKey = document.getElementById('api-key-input').value;
+        const saveChecked = document.getElementById('save-api-key').checked;
+        
+        if (!apiKey) {
+            this.showToast('Please enter an API key', 'error');
+            return;
+        }
+        
+        if (saveChecked) {
+            localStorage.setItem('currents_api_key', apiKey);
+        }
+        this.apiKey = apiKey;
+        this.hideApiKeyModal();
+        this.loadLatestNews();
+        this.showToast('API key saved successfully', 'success');
+    }
+
+    useDemoMode() {
+        // This method needs to be implemented
+        console.log('Using demo mode');
+        this.hideApiKeyModal();
+    }
+
+    resetApiKey() {
+        localStorage.removeItem('currents_api_key');
+        this.apiKey = null;
+        this.showToast('API key reset', 'info');
+    }
+
+    performHistoricalSearch() {
+        // This method needs to be implemented
+        console.log('Performing historical search...');
+    }
+
+    fetchHistoricalNews(query, filters) {
+        // This method needs to be implemented
+        // This would make API calls to Currents API
+        return Promise.resolve([]);
+    }
+
+    truncateText(text, limit) {
+        if (text.length <= limit) return text;
+        return text.slice(0, limit) + '...';
     }
 }
 
