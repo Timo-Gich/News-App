@@ -1,4 +1,6 @@
 // script.js - Updated Main Application with Offline Integration
+// Production-ready error handling and UI state management
+
 class CurrentsNewsApp {
     constructor() {
         this.apiKey = null;
@@ -20,6 +22,11 @@ class CurrentsNewsApp {
 
         // Initialize offline manager
         this.offlineManager = new OfflineManager();
+        
+        // ===== FIX #1: Delegate showToast to OfflineManager =====
+        // This prevents "this.showToast is not a function" errors
+        // Arrow function preserves lexical this, and bind ensures OfflineManager's this is correct
+        this.showToast = this.offlineManager.showToast.bind(this.offlineManager);
 
         // Load existing bookmarks from localStorage for backward compatibility
         this.bookmarks = JSON.parse(localStorage.getItem('currents_bookmarks') || '[]');
@@ -659,11 +666,17 @@ class CurrentsNewsApp {
             this.renderArticles();
             this.hideLoading();
             this.updateStats();
+            this.hideError();
             
             this.showToast(`Loaded ${articles.length} offline articles`, 'success');
         } catch (error) {
             console.error('Failed to load offline articles:', error);
             this.hideLoading();
+            // ===== FIX #2: Guard error UI when content exists =====
+            if (this.articles && this.articles.length > 0) {
+                this.showToast('Failed to load more offline content. Showing existing results.', 'warning');
+                return;
+            }
             this.showError('Failed to load offline articles: ' + error.message);
         }
     }
@@ -874,9 +887,6 @@ class CurrentsNewsApp {
         }
     }
 
-    // Keep the rest of your existing methods (API calls, UI updates, etc.)
-    // but integrate offline features where appropriate
-    
     async performSearch() {
         const searchInput = document.getElementById('search-input');
         const query = searchInput ? searchInput.value.trim() : '';
@@ -892,6 +902,7 @@ class CurrentsNewsApp {
         if (isOfflineSearch) {
             // Search offline articles
             this.searchQuery = query;
+            this.showLoading();
             
             try {
                 const articles = await this.offlineManager.searchOfflineArticles(query, this.filters);
@@ -901,14 +912,21 @@ class CurrentsNewsApp {
                 this.renderArticles();
                 this.hideLoading();
                 this.updateStats();
+                this.hideError();
                 this.showToast(`Found ${articles.length} offline articles for "${query}"`, 'success');
             } catch (error) {
                 this.hideLoading();
+                // ===== FIX #2: Guard error UI when content exists =====
+                if (this.articles && this.articles.length > 0) {
+                    this.showToast('Offline search failed. Showing existing results.', 'warning');
+                    return;
+                }
                 this.showError(error.message);
             }
         } else {
             // Search online (existing functionality)
             this.searchQuery = query;
+            this.showLoading();
 
             try {
                 this.articles = await this.fetchHistoricalNews(query, this.filters);
@@ -917,9 +935,15 @@ class CurrentsNewsApp {
                 this.renderArticles();
                 this.hideLoading();
                 this.updateStats();
+                this.hideError();
                 this.showToast(`Found ${this.articles.length} articles for "${query}"`, 'success');
             } catch (error) {
                 this.hideLoading();
+                // ===== FIX #2: Guard error UI when content exists =====
+                if (this.articles && this.articles.length > 0) {
+                    this.showToast('Search failed. Showing existing results.', 'warning');
+                    return;
+                }
                 this.showError(error.message);
             }
         }
@@ -1054,6 +1078,7 @@ class CurrentsNewsApp {
                 this.renderArticles();
                 this.hideLoading();
                 this.updateStats();
+                this.hideError();
                 
                 this.showToast(`Loaded ${this.articles.length} articles`, 'success');
             } else {
@@ -1062,6 +1087,11 @@ class CurrentsNewsApp {
         } catch (error) {
             console.error('Failed to load category news:', error);
             this.hideLoading();
+            // ===== FIX #2: Guard error UI when content exists =====
+            if (this.articles && this.articles.length > 0) {
+                this.showToast('Network issue. Showing existing results.', 'warning');
+                return;
+            }
             this.showError('Failed to load news: ' + error.message);
         }
     }
@@ -1176,9 +1206,15 @@ class CurrentsNewsApp {
         document.getElementById('loading').style.display = 'none';
     }
 
+    // ===== FIX #3: Proper error UI management =====
     showError(message) {
         document.getElementById('error-message').textContent = message;
         document.getElementById('error-container').style.display = 'block';
+    }
+
+    hideError() {
+        const el = document.getElementById('error-container');
+        if (el) el.style.display = 'none';
     }
 
     shareArticle(article) {
