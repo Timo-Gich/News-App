@@ -605,4 +605,133 @@ class OfflineManager {
             return null;
         }
     }
+
+    // ===== UNIFIED DATA FETCHER: Online/Offline/Cache Pipeline =====
+    async fetchArticles(params = {}) {
+        const {
+            source = 'latest',      // 'latest', 'category', 'search'
+            category = null,
+            query = null,
+            filters = {},
+            pageNum = 1,
+            pageSize = 12,
+            language = 'en',
+            apiKey = null,
+            baseUrl = null
+        } = params;
+
+        console.log(`[DataFetcher] Fetching ${source} (page ${pageNum}, online: ${this.isOnline})`);
+
+        // Step 1: Try to get cached page first (if offline or as fallback)
+        if (!this.isOnline) {
+            const cachedPage = await this.storage.getArticlesPage(pageNum, source);
+            if (cachedPage && cachedPage.length > 0) {
+                console.log(`[DataFetcher] Using cached page ${pageNum} (${cachedPage.length} articles)`);
+                return {
+                    articles: cachedPage,
+                    source: 'cache',
+                    pageNum: pageNum,
+                    isCached: true
+                };
+            }
+        }
+
+        // Step 2: If online, try API
+        if (this.isOnline && apiKey && baseUrl) {
+            try {
+                const articles = await this._fetchFromAPI({
+                    source,
+                    category,
+                    query,
+                    filters,
+                    language,
+                    apiKey,
+                    baseUrl
+                });
+
+                if (articles && articles.length > 0) {
+                    // Cache this page for offline use
+                    await this.cacheArticlesPage(articles, pageNum, source);
+                    
+                    console.log(`[DataFetcher] Fetched ${articles.length} articles from API`);
+                    return {
+                        articles: articles,
+                        source: 'api',
+                        pageNum: pageNum,
+                        isCached: false
+                    };
+                }
+            } catch (error) {
+                console.warn(`[DataFetcher] API fetch failed: ${error.message}`);
+                // Fall through to offline fallback
+            }
+        }
+
+        // Step 3: Fallback: Try IndexedDB (all saved articles)
+        try {
+            const offlineArticles = await this.storage.getOfflineArticles(pageSize, (pageNum - 1) * pageSize);
+            if (offlineArticles && offlineArticles.length > 0) {
+                console.log(`[DataFetcher] Using IndexedDB fallback (${offlineArticles.length} articles)`);
+                return {
+                    articles: offlineArticles,
+                    source: 'offline',
+                    pageNum: pageNum,
+                    isCached: true
+                };
+            }
+        } catch (error) {
+            console.warn(`[DataFetcher] IndexedDB fallback failed: ${error.message}`);
+        }
+
+        // No data available
+        throw new Error('No articles available (offline and no cache)');
+    }
+
+    // ===== HELPER: Fetch from API with proper error handling =====
+    async _fetchFromAPI(params) {
+        const { source, category, query, filters, language, apiKey, baseUrl } = params;
+
+        let url = `${baseUrl}/latest-news?language=${language}&apiKey=${apiKey}`;
+
+        if (source === 'category' && category) {
+            url = `${baseUrl}/latest-news?language=${language}&category=${encodeURIComponent(category)}&apiKey=${apiKey}`;
+        } else if (source === 'search' && query) {
+            url = `${baseUrl}/search?language=${language}&keywords=${encodeURIComponent(query)}&apiKey=${apiKey}`;
+            
+            if (filters.start_date && filters.end_date) {
+                url += `&start_date=${filters.start_date}&end_date=${filters.end_date}`;
+            }
+            if (filters.domain) {
+                url += `&domain=${encodeURIComponent(filters.domain)}`;
+            }
+            if (filters.category) {
+                url += `&category=${encodeURIComponent(filters.category)}`;
+            }
+        }
+
+        const response = await fetch(url);
+
+        if (!response.ok) {
+            if (response.status === 401) {
+                throw new Error('Invalid API key');
+            }
+            throw new Error(`API Error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        return data.news || [];
+    }
+
+    // ===== HELPER: Cache articles page for offline use =====
+    async cacheArticlesPage(articles, pageNum, source) {
+        if (!articles || articles.length === 0) return;
+
+        try {
+            // Store page metadata for retrieval
+            await this.storage.cacheArticlesPage(articles, pageNum, source);
+            console.log(`[DataFetcher] Cached page ${pageNum} for source "${source}"`);
+        } catch (error) {
+            console.warn(`[DataFetcher] Failed to cache page: ${error.message}`);
+        }
+    }
 }

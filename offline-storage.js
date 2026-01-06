@@ -733,4 +733,40 @@ class OfflineStorage {
             };
         });
     }
+
+    async getArticlesPage(pageNum, source) {
+        if (!this.db) return [];
+        try {
+            const key = `page_${source}_${pageNum}`;
+            const setting = await this.getSetting(key);
+            if (setting && setting.articles) {
+                console.log(`[Storage] Retrieved cached page ${pageNum} for source "${source}"`);
+                return setting.articles;
+            }
+            return [];
+        } catch (error) {
+            console.error('Error getting articles page:', error);
+            return [];
+        }
+    }
+
+    async cacheArticlesPage(articles, pageNum, source) {
+        if (!this.db || !articles || articles.length === 0) return false;
+        try {
+            const key = `page_${source}_${pageNum}`;
+            const pageData = {
+                articles: articles,
+                source: source,
+                pageNum: pageNum,
+                cachedAt: new Date().toISOString(),
+                count: articles.length
+            };
+            await this.setSetting(key, pageData);
+            console.log(`[Storage] Cached ${articles.length} articles for page ${pageNum} (source: ${source})`);
+            return true;
+        } catch (error) {
+            console.error('Error caching articles page:', error);
+            return false;
+        }
+    }
 }

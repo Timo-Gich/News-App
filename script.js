@@ -655,30 +655,13 @@ class CurrentsNewsApp {
     }
 
     async loadOfflineArticles() {
-        this.showLoading();
-        
-        try {
-            const articles = await this.offlineManager.getOfflineArticles(50);
-            this.articles = articles;
-            this.currentPage = 1;
-            this.totalPages = Math.ceil(this.articles.length / this.pageSize);
-            
-            this.renderArticles();
-            this.hideLoading();
-            this.updateStats();
-            this.hideError();
-            
-            this.showToast(`Loaded ${articles.length} offline articles`, 'success');
-        } catch (error) {
-            console.error('Failed to load offline articles:', error);
-            this.hideLoading();
-            // ===== FIX #2: Guard error UI when content exists =====
-            if (this.articles && this.articles.length > 0) {
-                this.showToast('Failed to load more offline content. Showing existing results.', 'warning');
-                return;
-            }
-            this.showError('Failed to load offline articles: ' + error.message);
-        }
+        this.currentPage = 1;
+        this.searchQuery = '';
+
+        await this.loadNews({
+            source: 'offline',
+            pageNum: 1
+        });
     }
 
     showOfflineLibraryModal() {
@@ -896,57 +879,15 @@ class CurrentsNewsApp {
             return;
         }
 
-        const offlineSearchBtn = document.getElementById('offline-search-toggle');
-        const isOfflineSearch = offlineSearchBtn && offlineSearchBtn.classList.contains('active');
+        this.searchQuery = query;
+        this.currentPage = 1;
 
-        if (isOfflineSearch) {
-            // Search offline articles
-            this.searchQuery = query;
-            this.showLoading();
-            
-            try {
-                const articles = await this.offlineManager.searchOfflineArticles(query, this.filters);
-                this.articles = articles;
-                this.currentPage = 1;
-                this.totalPages = Math.ceil(this.articles.length / this.pageSize);
-                this.renderArticles();
-                this.hideLoading();
-                this.updateStats();
-                this.hideError();
-                this.showToast(`Found ${articles.length} offline articles for "${query}"`, 'success');
-            } catch (error) {
-                this.hideLoading();
-                // ===== FIX #2: Guard error UI when content exists =====
-                if (this.articles && this.articles.length > 0) {
-                    this.showToast('Offline search failed. Showing existing results.', 'warning');
-                    return;
-                }
-                this.showError(error.message);
-            }
-        } else {
-            // Search online (existing functionality)
-            this.searchQuery = query;
-            this.showLoading();
-
-            try {
-                this.articles = await this.fetchHistoricalNews(query, this.filters);
-                this.currentPage = 1;
-                this.totalPages = Math.ceil(this.articles.length / this.pageSize);
-                this.renderArticles();
-                this.hideLoading();
-                this.updateStats();
-                this.hideError();
-                this.showToast(`Found ${this.articles.length} articles for "${query}"`, 'success');
-            } catch (error) {
-                this.hideLoading();
-                // ===== FIX #2: Guard error UI when content exists =====
-                if (this.articles && this.articles.length > 0) {
-                    this.showToast('Search failed. Showing existing results.', 'warning');
-                    return;
-                }
-                this.showError(error.message);
-            }
-        }
+        await this.loadNews({
+            source: 'search',
+            query: query,
+            filters: this.filters,
+            pageNum: 1
+        });
     }
 
     // Update the updateStats method to include offline stats
@@ -1060,39 +1001,72 @@ class CurrentsNewsApp {
 
     async loadCategoryNews(category) {
         this.currentCategory = category;
+        this.currentPage = 1;
+        this.searchQuery = '';
+
+        await this.loadNews({
+            source: 'category',
+            category: category,
+            pageNum: 1
+        });
+    }
+
+    // ===== NEW: Unified article loader (online/offline/cache) =====
+    async loadNews(params = {}) {
+        const {
+            source = 'latest',
+            category = null,
+            query = null,
+            filters = {},
+            pageNum = 1
+        } = params;
+
         this.showLoading();
-        
+
         try {
-            // Build API URL
-            const url = this.buildApiUrl(category);
-            console.log('Fetching news from:', url);
+            // Use unified data fetcher
+            const result = await this.offlineManager.fetchArticles({
+                source: source,
+                category: category,
+                query: query,
+                filters: filters,
+                pageNum: pageNum,
+                pageSize: this.pageSize,
+                language: this.currentLanguage,
+                apiKey: this.apiKey,
+                baseUrl: this.baseUrl
+            });
+
+            // Store articles and pagination state
+            this.articles = result.articles;
+            this.currentPage = pageNum;
             
-            // Make API request
-            const data = await this.makeApiRequest(url);
-            
-            if (data && data.news) {
-                this.articles = data.news;
-                this.currentPage = 1;
-                this.totalPages = Math.ceil(this.articles.length / this.pageSize);
-                
-                this.renderArticles();
-                this.hideLoading();
-                this.updateStats();
-                this.hideError();
-                
-                this.showToast(`Loaded ${this.articles.length} articles`, 'success');
-            } else {
-                throw new Error('No news data received');
-            }
-        } catch (error) {
-            console.error('Failed to load category news:', error);
+            // Calculate total pages
+            this.totalPages = Math.max(1, Math.ceil(result.articles.length / this.pageSize));
+
+            // Render using unified logic
+            this.renderArticles();
             this.hideLoading();
-            // ===== FIX #2: Guard error UI when content exists =====
+            this.updateStats();
+            this.hideError();
+
+            // Show appropriate toast
+            const sourceLabel = result.source === 'api' ? 'online' : 
+                               result.source === 'cache' ? 'cached' : 'offline';
+            const message = `Loaded ${result.articles.length} articles (${sourceLabel})`;
+            this.showToast(message, result.isCached ? 'warning' : 'success');
+
+        } catch (error) {
+            console.error('Failed to load news:', error);
+            this.hideLoading();
+
+            // Guard: only show error if no existing content
             if (this.articles && this.articles.length > 0) {
-                this.showToast('Network issue. Showing existing results.', 'warning');
+                this.showToast(`Network issue. Showing existing results.`, 'warning');
                 return;
             }
-            this.showError('Failed to load news: ' + error.message);
+
+            this.showError(`Failed to load news: ${error.message}`);
         }
     }
 
