@@ -1,4 +1,5 @@
 // offline-storage.js - IndexedDB wrapper for offline article storage
+// FIXED: Reliable getAll() + filter pattern instead of unreliable index queries
 class OfflineStorage {
     constructor() {
         this.dbName = 'CurrentsNewsDB';
@@ -103,7 +104,7 @@ class OfflineStorage {
             const request = store.put(articleToSave);
 
             request.onsuccess = () => {
-                console.log('Article saved to IndexedDB:', article.id);
+                console.log('Article saved to IndexedDB:', article.id, 'savedForOffline:', saveForOffline);
                 resolve(true);
             };
 
@@ -133,31 +134,29 @@ class OfflineStorage {
         });
     }
 
+    // ===== FIX #1: Use getAll() + filter instead of unreliable index query =====
     async getOfflineArticles(limit = 100, offset = 0) {
         if (!this.db) return [];
 
         return new Promise((resolve, reject) => {
             const transaction = this.db.transaction(['articles'], 'readonly');
             const store = transaction.objectStore('articles');
-            const index = store.index('savedForOffline');
-            const range = IDBKeyRange.only(true);
-            const articles = [];
-            let count = 0;
 
-            const request = index.openCursor(range);
+            // Use getAll() for reliability - avoids IDBKeyRange.only() issues
+            const request = store.getAll();
 
             request.onsuccess = (event) => {
-                const cursor = event.target.result;
-
-                if (cursor && count < offset + limit) {
-                    if (count >= offset) {
-                        articles.push(cursor.value);
-                    }
-                    count++;
-                    cursor.continue();
-                } else {
-                    resolve(articles);
-                }
+                const allArticles = event.target.result;
+                
+                // Filter for articles saved for offline (savedForOffline === true)
+                const offlineArticles = allArticles.filter(article => article.savedForOffline === true);
+                
+                console.log(`Found ${offlineArticles.length} offline articles (total: ${allArticles.length})`);
+                
+                // Apply offset and limit
+                const paginatedArticles = offlineArticles.slice(offset, offset + limit);
+                
+                resolve(paginatedArticles);
             };
 
             request.onerror = (event) => {
@@ -167,6 +166,7 @@ class OfflineStorage {
         });
     }
 
+    // ===== FIX #2: Filter search results to only offline articles =====
     async searchArticles(query, filters = {}) {
         if (!this.db) return [];
 
@@ -183,6 +183,12 @@ class OfflineStorage {
                 if (cursor) {
                     const article = cursor.value;
                     let matches = true;
+
+                    // CRITICAL: Only search in offline articles (saved for offline)
+                    if (article.savedForOffline !== true) {
+                        cursor.continue();
+                        return;
+                    }
 
                     // Search in title and description
                     if (query) {
@@ -424,6 +430,7 @@ class OfflineStorage {
         });
     }
 
+    // ===== FIX #3: Use getAll() + filter for reliable counting =====
     async getStorageStats() {
         if (!this.db) return null;
 
@@ -438,68 +445,13 @@ class OfflineStorage {
             let progressCount = 0;
             let offlineCount = 0;
             let readCount = 0;
+            let statsCompleted = 0;
+            const statsNeeded = 5;
 
-            try {
-                const articlesRequest = articlesStore.count();
-                articlesRequest.onsuccess = () => {
-                    articlesCount = articlesRequest.result;
-                };
-
-                const bookmarksRequest = bookmarksStore.count();
-                bookmarksRequest.onsuccess = () => {
-                    bookmarksCount = bookmarksRequest.result;
-                };
-
-                const progressRequest = progressStore.count();
-                progressRequest.onsuccess = () => {
-                    progressCount = progressRequest.result;
-                };
-
-                // Safely count offline articles using cursor instead of .only()
-                try {
-                    const offlineIndex = articlesStore.index('savedForOffline');
-                    let offlineCursorCount = 0;
-                    const offlineCursorRequest = offlineIndex.openCursor();
-
-                    offlineCursorRequest.onsuccess = (event) => {
-                        const cursor = event.target.result;
-                        if (cursor) {
-                            if (cursor.value === true) {
-                                offlineCursorCount++;
-                            }
-                            cursor.continue();
-                        } else {
-                            offlineCount = offlineCursorCount;
-                        }
-                    };
-                } catch (error) {
-                    console.warn('Could not count offline articles:', error);
-                    offlineCount = 0;
-                }
-
-                // Safely count read articles using cursor instead of .only()
-                try {
-                    const readIndex = articlesStore.index('read');
-                    let readCursorCount = 0;
-                    const readCursorRequest = readIndex.openCursor();
-
-                    readCursorRequest.onsuccess = (event) => {
-                        const cursor = event.target.result;
-                        if (cursor) {
-                            if (cursor.value === true) {
-                                readCursorCount++;
-                            }
-                            cursor.continue();
-                        } else {
-                            readCount = readCursorCount;
-                        }
-                    };
-                } catch (error) {
-                    console.warn('Could not count read articles:', error);
-                    readCount = 0;
-                }
-
-                transaction.oncomplete = () => {
+            const checkComplete = () => {
+                statsCompleted++;
+                if (statsCompleted === statsNeeded) {
+                    console.log(`Storage stats: total=${articlesCount}, offline=${offlineCount}, read=${readCount}, bookmarks=${bookmarksCount}`);
                     resolve({
                         totalArticles: articlesCount,
                         bookmarkedArticles: bookmarksCount,
@@ -507,12 +459,52 @@ class OfflineStorage {
                         readArticles: readCount,
                         articlesWithProgress: progressCount
                     });
-                };
+                }
+            };
 
-                transaction.onerror = (event) => {
-                    console.error('Transaction error in getStorageStats:', event.target.error);
-                    reject(event.target.error);
+            try {
+                // Count total articles
+                const articlesRequest = articlesStore.count();
+                articlesRequest.onsuccess = () => {
+                    articlesCount = articlesRequest.result;
+                    checkComplete();
                 };
+                articlesRequest.onerror = () => checkComplete();
+
+                // Count bookmarks
+                const bookmarksRequest = bookmarksStore.count();
+                bookmarksRequest.onsuccess = () => {
+                    bookmarksCount = bookmarksRequest.result;
+                    checkComplete();
+                };
+                bookmarksRequest.onerror = () => checkComplete();
+
+                // Count progress entries
+                const progressRequest = progressStore.count();
+                progressRequest.onsuccess = () => {
+                    progressCount = progressRequest.result;
+                    checkComplete();
+                };
+                progressRequest.onerror = () => checkComplete();
+
+                // Count offline articles using getAll() + filter for reliability
+                const offlineRequest = articlesStore.getAll();
+                offlineRequest.onsuccess = (event) => {
+                    const allArticles = event.target.result;
+                    offlineCount = allArticles.filter(article => article.savedForOffline === true).length;
+                    checkComplete();
+                };
+                offlineRequest.onerror = () => checkComplete();
+
+                // Count read articles using getAll() + filter for reliability
+                const readRequest = articlesStore.getAll();
+                readRequest.onsuccess = (event) => {
+                    const allArticles = event.target.result;
+                    readCount = allArticles.filter(article => article.read === true).length;
+                    checkComplete();
+                };
+                readRequest.onerror = () => checkComplete();
+
             } catch (error) {
                 console.error('Error in getStorageStats:', error);
                 reject(error);
@@ -547,27 +539,22 @@ class OfflineStorage {
         });
     }
 
+    // ===== FIX #4: Use getAll() + filter for reliable pending action retrieval =====
     async getPendingActions() {
         if (!this.db) return [];
 
         return new Promise((resolve, reject) => {
             const transaction = this.db.transaction(['actions'], 'readonly');
             const store = transaction.objectStore('actions');
-            const index = store.index('status');
-            const range = IDBKeyRange.only('pending');
-            const actions = [];
 
-            const request = index.openCursor(range);
+            // Use getAll() for reliability - avoids IDBKeyRange.only() issues
+            const request = store.getAll();
 
             request.onsuccess = (event) => {
-                const cursor = event.target.result;
-
-                if (cursor) {
-                    actions.push(cursor.value);
-                    cursor.continue();
-                } else {
-                    resolve(actions);
-                }
+                const allActions = event.target.result;
+                // Filter for pending actions
+                const pendingActions = allActions.filter(action => action.status === 'pending');
+                resolve(pendingActions);
             };
 
             request.onerror = (event) => {
