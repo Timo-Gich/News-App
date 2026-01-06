@@ -1,10 +1,15 @@
-// service-worker.js - Enhanced Service Worker
-const CACHE_VERSION = 'v2.0';
+// service-worker.js - Enhanced Service Worker with Production PWA Features
+const CACHE_VERSION = 'v2.1';
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const API_CACHE = `api-${CACHE_VERSION}`;
 const IMAGE_CACHE = `images-${CACHE_VERSION}`;
+const HTML_CACHE = `html-${CACHE_VERSION}`;
 
 const OFFLINE_URL = 'offline.html';
+
+// Version logging
+console.log(`[Service Worker] Version: ${CACHE_VERSION}`);
+console.log(`[Service Worker] Caches: STATIC=${STATIC_CACHE}, API=${API_CACHE}, IMAGES=${IMAGE_CACHE}, HTML=${HTML_CACHE}`);
 
 // Static assets to cache on install
 const STATIC_ASSETS = [

@@ -1526,3 +1526,99 @@ h6 {
         align-self: flex-end;
     }
 }
+
+
+/* PWA Metrics Panel */
+
+.pwa-metrics-panel {
+    position: fixed;
+    bottom: 100px;
+    right: 20px;
+    background-color: var(--card-bg);
+    border-radius: var(--border-radius);
+    box-shadow: var(--card-hover-shadow);
+    z-index: 2500;
+    max-width: 350px;
+    animation: slideInRight 0.3s ease;
+    border: 1px solid var(--border-color);
+}
+
+.metrics-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 20px;
+    border-bottom: 1px solid var(--border-color);
+    background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+    color: white;
+    border-radius: var(--border-radius) var(--border-radius) 0 0;
+}
+
+.metrics-header h3 {
+    margin: 0;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.metrics-close {
+    background: none;
+    border: none;
+    color: white;
+    cursor: pointer;
+    font-size: 18px;
+    padding: 0;
+    opacity: 0.8;
+    transition: opacity 0.2s;
+}
+
+.metrics-close:hover {
+    opacity: 1;
+}
+
+.metrics-content {
+    padding: 15px 20px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.metric-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 13px;
+}
+
+.metric-item:last-child {
+    border-bottom: none;
+}
+
+.metric-label {
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.metric-value {
+    color: var(--text-color);
+    font-weight: 600;
+    font-family: 'Courier New', monospace;
+}
+
+.metric-value.online {
+    color: var(--accent-color);
+}
+
+.metric-value.offline {
+    color: var(--danger-color);
+}
+
+@media (max-width: 768px) {
+    .pwa-metrics-panel {
+        max-width: 280px;
+        bottom: 80px;
+        right: 10px;
+    }
+}
