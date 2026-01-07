@@ -53,12 +53,17 @@ body {
     color: var(--text-color);
     line-height: 1.6;
     transition: var(--transition);
+    overflow-x: hidden;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
 }
 
 .container {
+    width: 100%;
     max-width: var(--container-width);
+    padding: 0 15px;
     margin: 0 auto;
-    padding: 0 20px;
 }
 
 
@@ -425,9 +430,11 @@ h6 {
     box-shadow: var(--card-shadow);
     transition: var(--transition);
     cursor: pointer;
-    height: 100%;
+    min-height: auto;
+    height: auto;
     display: flex;
     flex-direction: column;
+    break-inside: avoid;
 }
 
 .news-card:hover {
@@ -436,9 +443,11 @@ h6 {
 }
 
 .news-image {
-    height: 200px;
+    height: auto;
+    min-height: 200px;
     width: 100%;
     overflow: hidden;
+    aspect-ratio: 16/9;
 }
 
 .news-image img {
@@ -470,6 +479,7 @@ h6 {
     flex-grow: 1;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
 }
 
 .news-title {
@@ -945,16 +955,43 @@ h6 {
 }
 
 
-/* Responsive Design */
+/* Responsive Design - Mobile-First Approach */
 
-@media (max-width: 992px) {
+@media (min-width: 576px) {
     .news-grid {
         grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-        gap: 20px;
     }
 }
 
+@media (min-width: 768px) {
+    .nav-menu {
+        flex-direction: row;
+    }
+    .search-box {
+        flex-direction: row;
+    }
+}
+
+@media (min-width: 992px) {
+    .news-grid {
+        grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+    }
+}
+
+
+/* Offline Library Modal - Full screen on mobile */
+
+#offline-library-modal .modal-content {
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
 @media (max-width: 768px) {
+    #offline-library-modal .modal-content {
+        max-height: 100vh;
+        margin: 0;
+        border-radius: 0;
+    }
     .nav-toggle {
         display: block;
     }
@@ -994,6 +1031,15 @@ h6 {
     .historical-form {
         flex-direction: column;
     }
+    .library-stats {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    .library-controls {
+        flex-direction: column;
+    }
+    .library-controls .btn {
+        width: 100%;
+    }
 }
 
 @media (max-width: 576px) {
@@ -1009,6 +1055,16 @@ h6 {
     }
     .modal-actions .btn {
         width: 100%;
+    }
+    .library-stats {
+        grid-template-columns: 1fr;
+    }
+    .offline-library-card-header {
+        flex-direction: column;
+        gap: 10px;
+    }
+    .offline-library-card-actions {
+        align-self: flex-end;
     }
 }
 

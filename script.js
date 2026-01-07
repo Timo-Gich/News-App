@@ -22,7 +22,7 @@ class CurrentsNewsApp {
 
         // Initialize offline manager
         this.offlineManager = new OfflineManager();
-        
+
         // ===== FIX #1: Delegate showToast to OfflineManager =====
         // This prevents "this.showToast is not a function" errors
         // Arrow function preserves lexical this, and bind ensures OfflineManager's this is correct
@@ -1105,8 +1105,10 @@ class CurrentsNewsApp {
         const startIndex = (this.currentPage - 1) * this.pageSize;
         const endIndex = startIndex + this.pageSize;
         const pageArticles = this.articles.slice(startIndex, endIndex);
-        
+
         this.renderArticles(pageArticles);
+
+        // Update pagination with context about data source
         this.updatePagination();
     }
 
@@ -1148,13 +1150,38 @@ class CurrentsNewsApp {
         const prevBtn = document.getElementById('prev-page');
         const nextBtn = document.getElementById('next-page');
         const pageInfo = document.getElementById('page-info');
+        const currentPageEl = document.getElementById('current-page');
+        const totalPagesEl = document.getElementById('total-pages');
 
-        if (prevBtn && nextBtn && pageInfo) {
-            prevBtn.disabled = this.currentPage === 1;
-            nextBtn.disabled = this.currentPage === this.totalPages;
-            
-            pageInfo.textContent = `Page ${this.currentPage} of ${this.totalPages}`;
+        if (!prevBtn || !nextBtn || !pageInfo) return;
+
+        prevBtn.disabled = this.currentPage === 1;
+
+        // Determine pagination display based on data source
+        if (this.offlineMode || !navigator.onLine) {
+            // Offline mode - show article count instead of total pages
+            const articleCount = this.articles.length;
+            const startItem = (this.currentPage - 1) * this.pageSize + 1;
+            const endItem = Math.min(this.currentPage * this.pageSize, articleCount);
+
+            pageInfo.innerHTML = `Offline • Page ${this.currentPage} • ${articleCount} articles`;
+
+            // Disable next button if no more articles
+            nextBtn.disabled = endItem >= articleCount;
+        } else {
+            // Online mode - show traditional pagination
+            nextBtn.disabled = this.currentPage >= this.totalPages;
+
+            if (this.totalPages === 1) {
+                pageInfo.innerHTML = `Page ${this.currentPage} • ${this.articles.length} articles`;
+            } else {
+                pageInfo.innerHTML = `Page ${this.currentPage} of ${this.totalPages}`;
+            }
         }
+
+        // Update individual elements for screen readers
+        if (currentPageEl) currentPageEl.textContent = this.currentPage;
+        if (totalPagesEl) totalPagesEl.textContent = this.totalPages;
     }
 
     updateDateFilters() {
