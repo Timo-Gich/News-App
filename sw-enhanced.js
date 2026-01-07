@@ -6,7 +6,7 @@ const IMAGE_CACHE = `images-${CACHE_VERSION}`;
 
 const OFFLINE_URL = 'offline.html';
 
-// Static assets to cache on install
+// Dynamic asset caching for GitHub Pages compatibility
 const STATIC_ASSETS = [
     './',
     './index.html',
@@ -20,6 +20,19 @@ const STATIC_ASSETS = [
     'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
     'https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Roboto:wght@300;400;500&display=swap'
 ];
+
+// Function to get base URL for GitHub Pages compatibility
+function getBaseUrl() {
+    return window.location.pathname.replace(/\/[^\/]*$/, '/') || './';
+}
+
+// Function to make URLs relative to base path
+function makeRelativeUrl(url) {
+    const baseUrl = getBaseUrl();
+    if (url.startsWith('http')) return url; // External URLs
+    if (url.startsWith('/')) return url; // Absolute paths
+    return baseUrl + url;
+}
 
 // Install event with robust caching
 self.addEventListener('install', event => {

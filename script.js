@@ -75,6 +75,59 @@ class CurrentsNewsApp {
         } catch (error) {
             console.warn('Failed to update stats:', error);
         }
+
+        // Enhanced error handling for GitHub Pages
+        this.setupGitHubPagesErrorHandling();
+    }
+
+    // ==================== GITHUB PAGES ERROR HANDLING ====================
+    setupGitHubPagesErrorHandling() {
+        // Handle 404 errors gracefully
+        window.addEventListener('error', (event) => {
+            console.warn('Resource loading error:', event.error);
+
+            // If it's a 404 error, try to reload the page
+            if (event.error && event.error.message &&
+                (event.error.message.includes('404') || event.error.message.includes('Not Found'))) {
+                this.showToast('Resource not found. Retrying...', 'warning');
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1000);
+            }
+        });
+
+        // Handle fetch errors
+        const originalFetch = window.fetch;
+        window.fetch = async(...args) => {
+            try {
+                const response = await originalFetch(...args);
+                if (!response.ok && response.status === 404) {
+                    console.warn('404 error in fetch:', args[0]);
+                    this.showToast('Resource not found. Using cached data.', 'warning');
+                }
+                return response;
+            } catch (error) {
+                console.error('Fetch error:', error);
+                throw error;
+            }
+        };
+
+        // Handle service worker registration errors
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.ready.catch((error) => {
+                console.warn('Service Worker registration failed:', error);
+                this.showToast('Service Worker failed to register. Some features may not work.', 'warning');
+            });
+        }
+
+        // Handle manifest.json loading errors
+        const manifestLink = document.querySelector('link[rel="manifest"]');
+        if (manifestLink) {
+            manifestLink.addEventListener('error', () => {
+                console.warn('Manifest.json failed to load');
+                this.showToast('PWA manifest failed to load. App may not install properly.', 'warning');
+            });
+        }
     }
 
     // ==================== THEME MANAGEMENT ====================

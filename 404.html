@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Veritas - Redirecting</title>
+    <title>Currents News - Redirecting</title>
     <style>
         body {
             font-family: 'Roboto', sans-serif;
@@ -53,17 +53,21 @@
     <script>
         // Enhanced PWA routing for GitHub Pages
         function handleRouting() {
-            // Get the current path
+            // Get the current path and hash
             const path = window.location.pathname;
             const hash = window.location.hash;
+            const baseUrl = window.location.origin + window.location.pathname.replace(/\/[^\/]*$/, '/');
 
             // For GitHub Pages, we need to redirect all routes to index.html
             // but preserve the hash for PWA routing
-            let targetUrl = '/';
+            let targetUrl = baseUrl;
 
             // If there's a hash, preserve it
             if (hash) {
                 targetUrl += hash;
+            } else {
+                // If no hash, ensure we go to the main app
+                targetUrl += '?standalone=true';
             }
 
             // Redirect to the main app
@@ -81,7 +85,7 @@
 <body>
     <div class="loader">
         <div class="spinner"></div>
-        <div class="message">Redirecting to Veritas...</div>
+        <div class="message">Redirecting to Currents News...</div>
         <div class="subtext">Please wait while we load your news</div>
     </div>
 </body>

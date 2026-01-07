@@ -31,9 +31,13 @@ class CacheController {
                 }
             }
 
+            // Calculate dynamic scope for GitHub Pages compatibility
+            const baseUrl = window.location.pathname.replace(/\/[^\/]*$/, '/');
+            const scope = baseUrl || './';
+
             // Register enhanced service worker with robust caching
             this.registration = await navigator.serviceWorker.register('./sw-enhanced.js', {
-                scope: './',
+                scope: scope,
                 updateViaCache: 'none'
             });
 

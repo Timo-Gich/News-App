@@ -1,8 +1,9 @@
 {
-    "name": "Veritas",
-    "short_name": "Veritas",
-    "description": "Global news aggregator using Veritas News API",
-    "start_url": "/?standalone=true",
+    "name": "Currents News",
+    "short_name": "Currents",
+    "description": "Global news aggregator with full offline reading capability",
+    "start_url": "./?standalone=true",
+    "scope": "./",
     "display": "standalone",
     "background_color": "#ffffff",
     "theme_color": "#2563eb",
@@ -40,21 +41,21 @@
         "sizes": "1280x720",
         "type": "image/jpeg",
         "form_factor": "wide",
-        "label": "Veritas News App Dashboard"
+        "label": "Currents News App Dashboard"
     }],
     "categories": ["news", "productivity", "utilities"],
     "shortcuts": [{
             "name": "Latest News",
             "short_name": "Latest",
             "description": "View latest news articles",
-            "url": "/#/latest",
+            "url": "./#/latest",
             "icons": [{ "src": "https://img.icons8.com/color/96/000000/news.png", "sizes": "96x96" }]
         },
         {
             "name": "Search News",
             "short_name": "Search",
             "description": "Search for news articles",
-            "url": "/#/search",
+            "url": "./#/search",
             "icons": [{ "src": "https://img.icons8.com/color/96/000000/search.png", "sizes": "96x96" }]
         }
     ],
