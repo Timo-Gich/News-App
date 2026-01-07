@@ -1678,3 +1678,80 @@ h6 {
         right: 10px;
     }
 }
+
+
+/* Download Progress Container */
+
+#download-progress-container {
+    background-color: var(--bg-secondary);
+    border-radius: var(--border-radius);
+    padding: 15px 20px;
+    margin: 20px 0;
+    box-shadow: var(--card-shadow);
+}
+
+.progress-container {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.progress-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: 500;
+    color: var(--text-color);
+}
+
+.progress-text {
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
+.progress-count {
+    font-weight: 600;
+    color: var(--primary-color);
+}
+
+.progress-bar {
+    height: 8px;
+    background-color: var(--bg-tertiary);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--primary-color), var(--accent-color));
+    border-radius: 4px;
+    transition: width 0.3s ease, background-color 0.3s ease;
+    width: 0%;
+}
+
+.progress-bar-fill.success {
+    background-color: var(--accent-color);
+}
+
+.progress-bar-fill.warning {
+    background-color: var(--warning-color);
+}
+
+.progress-bar-fill.error {
+    background-color: var(--danger-color);
+}
+
+@media (max-width: 768px) {
+    #download-progress-container {
+        margin: 15px 0;
+        padding: 12px 15px;
+    }
+    .progress-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 5px;
+    }
+    .progress-count {
+        align-self: flex-end;
+    }
+}

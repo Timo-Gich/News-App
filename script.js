@@ -46,6 +46,9 @@ class CurrentsNewsApp {
         try {
             await this.offlineManager.init();
             console.log('Offline Manager initialized');
+
+            // Start auto-download for latest news (background, small)
+            this.offlineManager.autoDownloadLatestPages();
         } catch (error) {
             console.warn('Offline Manager initialization failed:', error);
         }
@@ -384,6 +387,11 @@ class CurrentsNewsApp {
         addIdListener('storage-manager', 'click', (e) => {
             e.preventDefault();
             this.showOfflineLibrary();
+        });
+
+        // Download offline button
+        addIdListener('download-offline-btn', 'click', () => {
+            this.downloadOfflineArticles();
         });
 
         // Mobile menu toggle
@@ -1314,6 +1322,42 @@ class CurrentsNewsApp {
     truncateText(text, limit) {
         if (text.length <= limit) return text;
         return text.slice(0, limit) + '...';
+    }
+
+    // ==================== DOWNLOAD OFFLINE ARTICLES ====================
+    async downloadOfflineArticles() {
+        try {
+            // Prompt user for number of pages to download
+            const pageCount = prompt(
+                'How many pages would you like to download for offline reading?\n\n' +
+                'Each page contains ~12 articles.\n' +
+                'Recommended: 15 pages (~70-80 MB)\n' +
+                'Maximum: 20 pages (~100 MB)',
+                '15'
+            );
+
+            if (!pageCount || isNaN(pageCount)) {
+                return;
+            }
+
+            const count = parseInt(pageCount);
+            if (count < 1 || count > 20) {
+                this.showToast('Please enter a number between 1 and 20', 'warning');
+                return;
+            }
+
+            // Start manual download
+            const success = await this.offlineManager.manualDownloadLatestPages(count);
+            
+            if (success) {
+                // Refresh the current view to show downloaded articles
+                await this.loadLatestNews();
+            }
+
+        } catch (error) {
+            console.error('Download failed:', error);
+            this.showToast('Download failed', 'error');
+        }
     }
 }
 

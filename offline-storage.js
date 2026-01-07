@@ -147,15 +147,15 @@ class OfflineStorage {
 
             request.onsuccess = (event) => {
                 const allArticles = event.target.result;
-                
+
                 // Filter for articles saved for offline (savedForOffline === true)
                 const offlineArticles = allArticles.filter(article => article.savedForOffline === true);
-                
+
                 console.log(`Found ${offlineArticles.length} offline articles (total: ${allArticles.length})`);
-                
+
                 // Apply offset and limit
                 const paginatedArticles = offlineArticles.slice(offset, offset + limit);
-                
+
                 resolve(paginatedArticles);
             };
 
@@ -750,23 +750,101 @@ class OfflineStorage {
         }
     }
 
-    async cacheArticlesPage(articles, pageNum, source) {
+    async cacheArticlesPage(articles, pageNum, source, origin = 'auto') {
         if (!this.db || !articles || articles.length === 0) return false;
         try {
             const key = `page_${source}_${pageNum}`;
+            const sizeMB = this.calculateArticlesSize(articles);
             const pageData = {
                 articles: articles,
                 source: source,
                 pageNum: pageNum,
                 cachedAt: new Date().toISOString(),
-                count: articles.length
+                count: articles.length,
+                sizeMB: sizeMB,
+                origin: origin
             };
             await this.setSetting(key, pageData);
-            console.log(`[Storage] Cached ${articles.length} articles for page ${pageNum} (source: ${source})`);
+            console.log(`[Storage] Cached ${articles.length} articles for page ${pageNum} (source: ${source}, origin: ${origin}, size: ${sizeMB.toFixed(2)}MB)`);
             return true;
         } catch (error) {
             console.error('Error caching articles page:', error);
             return false;
         }
+    }
+
+    async getAllCachedPages(source = 'latest') {
+        if (!this.db) return [];
+        try {
+            const pages = [];
+            let pageNum = 1;
+
+            while (true) {
+                const page = await this.getArticlesPage(pageNum, source);
+                if (page.length === 0) break;
+                pages.push({ pageNum, articles: page });
+                pageNum++;
+            }
+
+            return pages;
+        } catch (error) {
+            console.error('Error getting all cached pages:', error);
+            return [];
+        }
+    }
+
+    async clearCachedPages(source = 'latest') {
+        if (!this.db) return 0;
+        try {
+            const pages = await this.getAllCachedPages(source);
+            let deletedCount = 0;
+
+            for (const page of pages) {
+                const key = `page_${source}_${page.pageNum}`;
+                await this.setSetting(key, null); // Remove setting
+                deletedCount++;
+            }
+
+            console.log(`[Storage] Cleared ${deletedCount} cached pages for source "${source}"`);
+            return deletedCount;
+        } catch (error) {
+            console.error('Error clearing cached pages:', error);
+            return 0;
+        }
+    }
+
+    calculateArticlesSize(articles) {
+        if (!articles || articles.length === 0) return 0;
+
+        // Estimate size based on article properties
+        const avgArticleSize = 2048; // bytes per article (conservative estimate)
+        const totalSizeBytes = articles.length * avgArticleSize;
+        return totalSizeBytes / (1024 * 1024); // Convert to MB
+    }
+
+    async estimateDownloadSize(pageCount, articlesPerPage = 12) {
+        const estimatedArticles = pageCount * articlesPerPage;
+        const estimatedSize = this.calculateArticlesSize(new Array(estimatedArticles).fill({}));
+        return {
+            articles: estimatedArticles,
+            sizeMB: estimatedSize,
+            sizeText: estimatedSize > 1 ? `${estimatedSize.toFixed(1)} MB` : `${(estimatedSize * 1024).toFixed(0)} KB`
+        };
+    }
+
+    async getSessionAutoDownloadStatus() {
+        return await this.getSetting('auto_download_session', false);
+    }
+
+    async setSessionAutoDownloadStatus(status) {
+        return await this.setSetting('auto_download_session', status);
+    }
+
+    async getLastAutoDownloadTime() {
+        return await this.getSetting('last_auto_download');
+    }
+
+    async setLastAutoDownloadTime(time) {
+        return await this.setSetting('last_auto_download', time);
     }
 }

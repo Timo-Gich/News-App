@@ -606,18 +606,261 @@ class OfflineManager {
         }
     }
 
+    // ===== HYBRID OFFLINE DOWNLOAD SYSTEM =====
+
+    // Smart Auto-Download Controller (Background, Small)
+    async autoDownloadLatestPages() {
+        try {
+            // Check if auto-download already ran this session
+            const sessionStatus = await this.storage.getSessionAutoDownloadStatus();
+            if (sessionStatus) {
+                console.log('[AutoDownload] Already ran this session, skipping');
+                return;
+            }
+
+            // Check prerequisites
+            if (!this.isOnline) {
+                console.log('[AutoDownload] Offline, skipping auto-download');
+                return;
+            }
+
+            if (!navigator.onLine) {
+                console.log('[AutoDownload] Navigator offline, skipping');
+                return;
+            }
+
+            // Check connection quality (Wi-Fi preferred)
+            const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+            if (connection) {
+                // Skip if on cellular connection (unless explicitly allowed)
+                if (connection.effectiveType && connection.effectiveType.includes('2g')) {
+                    console.log('[AutoDownload] Poor connection, skipping');
+                    return;
+                }
+            }
+
+            // Check battery level (if available)
+            if (navigator.getBattery) {
+                try {
+                    const battery = await navigator.getBattery();
+                    if (battery.level < 0.2) {
+                        console.log('[AutoDownload] Low battery, skipping');
+                        return;
+                    }
+                } catch (error) {
+                    console.log('[AutoDownload] Battery check failed, proceeding');
+                }
+            }
+
+            // Check storage quota
+            const storageUsage = await this.storage.estimateStorageUsage();
+            if (storageUsage.percentage > 80) {
+                console.log('[AutoDownload] Storage nearly full, skipping');
+                return;
+            }
+
+            console.log('[AutoDownload] Starting auto-download of pages 1-2');
+
+            // Download pages 1 and 2 of latest news
+            const downloadPromises = [];
+            for (let pageNum = 1; pageNum <= 2; pageNum++) {
+                downloadPromises.push(this.downloadPageForOffline(pageNum, 'latest', 'auto'));
+            }
+
+            const results = await Promise.allSettled(downloadPromises);
+            const successfulDownloads = results.filter(r => r.status === 'fulfilled').length;
+
+            if (successfulDownloads > 0) {
+                // Mark auto-download as completed for this session
+                await this.storage.setSessionAutoDownloadStatus(true);
+                await this.storage.setLastAutoDownloadTime(new Date().toISOString());
+
+                console.log(`[AutoDownload] Completed: ${successfulDownloads} pages downloaded`);
+                this.showToast(`Auto-downloaded ${successfulDownloads} pages for offline reading`, 'success');
+            }
+
+        } catch (error) {
+            console.error('[AutoDownload] Failed:', error);
+        }
+    }
+
+    // Manual Bulk Download Controller (User-Controlled, Large)
+    async manualDownloadLatestPages(pageCount = 15) {
+        try {
+            // Check if online
+            if (!this.isOnline || !navigator.onLine) {
+                this.showToast('You must be online to download articles', 'error');
+                return false;
+            }
+
+            // Check storage quota
+            const storageUsage = await this.storage.estimateStorageUsage();
+            if (storageUsage.percentage > 80) {
+                this.showToast('Storage nearly full. Please clear some space first.', 'warning');
+                return false;
+            }
+
+            // Estimate download size
+            const sizeEstimate = await this.storage.estimateDownloadSize(pageCount);
+            const proceed = confirm(
+                `Download ${pageCount} pages (${sizeEstimate.sizeText})?\n\n` +
+                `Estimated: ${sizeEstimate.articles} articles\n` +
+                `Storage used: ${sizeEstimate.sizeText}\n\n` +
+                `This will download the latest news pages for offline reading.`
+            );
+
+            if (!proceed) {
+                return false;
+            }
+
+            console.log(`[ManualDownload] Starting download of ${pageCount} pages`);
+
+            // Show progress UI
+            this.showDownloadProgress(true, 0, pageCount);
+
+            let downloadedPages = 0;
+            let totalSizeMB = 0;
+            let cancelled = false;
+
+            // Download pages sequentially
+            for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
+                // Check if cancelled
+                if (cancelled) {
+                    console.log('[ManualDownload] Cancelled by user');
+                    this.showToast('Download cancelled', 'info');
+                    break;
+                }
+
+                try {
+                    const result = await this.downloadPageForOffline(pageNum, 'latest', 'manual');
+                    if (result.success) {
+                        downloadedPages++;
+                        totalSizeMB += result.sizeMB;
+
+                        // Update progress
+                        this.updateDownloadProgress(downloadedPages, pageCount, result.sizeMB);
+                    } else {
+                        console.log(`[ManualDownload] Failed to download page ${pageNum}`);
+                    }
+                } catch (error) {
+                    console.error(`[ManualDownload] Error downloading page ${pageNum}:`, error);
+                }
+            }
+
+            // Hide progress UI
+            this.showDownloadProgress(false);
+
+            if (downloadedPages > 0) {
+                this.showToast(
+                    `Downloaded ${downloadedPages} pages (${totalSizeMB.toFixed(1)} MB)`,
+                    'success'
+                );
+
+                // Update stats
+                await this.updateStats();
+                return true;
+            } else {
+                this.showToast('No pages were downloaded', 'warning');
+                return false;
+            }
+
+        } catch (error) {
+            console.error('[ManualDownload] Failed:', error);
+            this.showToast('Download failed', 'error');
+            return false;
+        }
+    }
+
+    // Helper: Download a single page for offline
+    async downloadPageForOffline(pageNum, source, origin) {
+        try {
+            // Fetch articles for this page
+            const articles = await this._fetchFromAPI({
+                source: 'latest',
+                category: null,
+                query: null,
+                filters: {},
+                language: this.currentLanguage || 'en',
+                apiKey: this.apiKey,
+                baseUrl: this.baseUrl
+            });
+
+            if (!articles || articles.length === 0) {
+                return { success: false, sizeMB: 0 };
+            }
+
+            // Cache the page
+            const cached = await this.storage.cacheArticlesPage(articles, pageNum, source, origin);
+
+            if (cached) {
+                const sizeMB = this.storage.calculateArticlesSize(articles);
+                console.log(`[Download] Cached page ${pageNum} (${articles.length} articles, ${sizeMB.toFixed(2)}MB)`);
+                return { success: true, sizeMB: sizeMB };
+            } else {
+                return { success: false, sizeMB: 0 };
+            }
+
+        } catch (error) {
+            console.error(`[Download] Failed to download page ${pageNum}:`, error);
+            return { success: false, sizeMB: 0 };
+        }
+    }
+
+    // Download Progress UI Management
+    showDownloadProgress(show, current = 0, total = 0) {
+        const progressContainer = document.getElementById('download-progress-container');
+        if (!progressContainer) return;
+
+        if (show) {
+            progressContainer.style.display = 'block';
+            progressContainer.querySelector('.progress-count').textContent = `${current}/${total}`;
+            progressContainer.querySelector('.progress-bar-fill').style.width = '0%';
+            progressContainer.querySelector('.progress-text').textContent = 'Downloading...';
+        } else {
+            progressContainer.style.display = 'none';
+        }
+    }
+
+    updateDownloadProgress(current, total, pageMB) {
+        const progressContainer = document.getElementById('download-progress-container');
+        if (!progressContainer) return;
+
+        const percentage = (current / total) * 100;
+        const progressFill = progressContainer.querySelector('.progress-bar-fill');
+        const progressText = progressContainer.querySelector('.progress-text');
+        const progressCount = progressContainer.querySelector('.progress-count');
+
+        progressFill.style.width = `${percentage}%`;
+        progressText.textContent = `Downloading page ${current} (${pageMB.toFixed(2)} MB)`;
+        progressCount.textContent = `${current}/${total}`;
+
+        // Update color based on progress
+        if (percentage > 90) {
+            progressFill.style.backgroundColor = '#10b981';
+        } else if (percentage > 50) {
+            progressFill.style.backgroundColor = '#f59e0b';
+        }
+    }
+
+    // Cancel download handler
+    cancelDownload() {
+        // This would be called from UI button
+        console.log('[ManualDownload] Cancel requested');
+        // Implementation would need to track active downloads
+    }
+
     // ===== UNIFIED DATA FETCHER: Online/Offline/Cache Pipeline =====
     async fetchArticles(params = {}) {
         const {
-            source = 'latest',      // 'latest', 'category', 'search'
-            category = null,
-            query = null,
-            filters = {},
-            pageNum = 1,
-            pageSize = 12,
-            language = 'en',
-            apiKey = null,
-            baseUrl = null
+            source = 'latest', // 'latest', 'category', 'search'
+                category = null,
+                query = null,
+                filters = {},
+                pageNum = 1,
+                pageSize = 12,
+                language = 'en',
+                apiKey = null,
+                baseUrl = null
         } = params;
 
         console.log(`[DataFetcher] Fetching ${source} (page ${pageNum}, online: ${this.isOnline})`);
@@ -652,7 +895,7 @@ class OfflineManager {
                 if (articles && articles.length > 0) {
                     // Cache this page for offline use
                     await this.cacheArticlesPage(articles, pageNum, source);
-                    
+
                     console.log(`[DataFetcher] Fetched ${articles.length} articles from API`);
                     return {
                         articles: articles,
@@ -683,6 +926,27 @@ class OfflineManager {
             console.warn(`[DataFetcher] IndexedDB fallback failed: ${error.message}`);
         }
 
+        // Step 4: Try cached pages from latest news
+        try {
+            const cachedPages = await this.storage.getAllCachedPages('latest');
+            if (cachedPages.length > 0) {
+                // Merge all cached pages into one array
+                const allCachedArticles = cachedPages.flatMap(page => page.articles);
+
+                if (allCachedArticles.length > 0) {
+                    console.log(`[DataFetcher] Using cached pages (${allCachedArticles.length} articles)`);
+                    return {
+                        articles: allCachedArticles,
+                        source: 'cached_pages',
+                        pageNum: pageNum,
+                        isCached: true
+                    };
+                }
+            }
+        } catch (error) {
+            console.warn(`[DataFetcher] Cached pages fallback failed: ${error.message}`);
+        }
+
         // No data available
         throw new Error('No articles available (offline and no cache)');
     }
@@ -697,7 +961,7 @@ class OfflineManager {
             url = `${baseUrl}/latest-news?language=${language}&category=${encodeURIComponent(category)}&apiKey=${apiKey}`;
         } else if (source === 'search' && query) {
             url = `${baseUrl}/search?language=${language}&keywords=${encodeURIComponent(query)}&apiKey=${apiKey}`;
-            
+
             if (filters.start_date && filters.end_date) {
                 url += `&start_date=${filters.start_date}&end_date=${filters.end_date}`;
             }

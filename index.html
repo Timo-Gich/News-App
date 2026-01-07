@@ -71,6 +71,9 @@
                         <option value="pt">Portuguese</option>
                     </select>
                 </div>
+                <button id="download-offline-btn" class="btn btn-secondary" title="Download Offline Articles">
+                    <i class="fas fa-download"></i> Download Offline
+                </button>
             </div>
         </div>
     </header>
@@ -192,6 +195,19 @@
                 <button id="next-page" class="btn btn-secondary">
                     Next <i class="fas fa-chevron-right"></i>
                 </button>
+            </div>
+
+            <!-- Download Progress Container -->
+            <div id="download-progress-container" style="display: none; margin: 20px 0;">
+                <div class="progress-container">
+                    <div class="progress-header">
+                        <span class="progress-text">Downloading...</span>
+                        <span class="progress-count">0/0</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-bar-fill"></div>
+                    </div>
+                </div>
             </div>
 
             <!-- Historical Search Section -->
