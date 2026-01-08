@@ -134,25 +134,19 @@ h6 {
     position: sticky;
     top: 0;
     z-index: 1000;
-    min-height: var(--header-height);
+    height: var(--header-height);
     display: flex;
-    align-items: stretch;
-    padding: 0;
-    width: 100%;
-    max-width: 100%;
-    overflow: hidden;
+    align-items: center;
+    flex-wrap: wrap;
+    overflow: visible;
 }
 
 .header .container {
     display: flex;
-    flex-wrap: wrap;
     justify-content: space-between;
     align-items: center;
     width: 100%;
-    max-width: 100%;
-    padding: 10px 15px;
-    margin: 0 auto;
-    gap: 15px;
+    flex-wrap: wrap;
 }
 
 .logo {
@@ -1944,3 +1938,6 @@ h6 {
     z-index: 9999;
     border: 1px solid var(--border-color);
 }
+
+
+/* Ensure nav menu appears above other content */
