@@ -137,6 +137,13 @@ self.addEventListener('fetch', event => {
         return;
     }
 
+    // CRITICAL: Handle navigation requests FIRST with cache-first strategy
+    // This ensures the app shell loads offline
+    if (request.mode === 'navigate') {
+        event.respondWith(handleNavigation(event));
+        return;
+    }
+
     // Handle different types of requests with different strategies
     if (url.hostname === 'api.currentsapi.services') {
         event.respondWith(apiFirstStrategy(event));
@@ -148,6 +155,113 @@ self.addEventListener('fetch', event => {
         event.respondWith(networkFirstStrategy(event));
     }
 });
+
+// Navigation handler: Cache-first strategy for page loads
+async function handleNavigation(event) {
+    const cache = await caches.open(STATIC_CACHE);
+    const requestUrl = new URL(event.request.url);
+    
+    // Define all possible URL variations for the same page
+    // This handles GitHub Pages URL quirks and trailing slash issues
+    const possibleUrls = [
+        event.request.url,
+        requestUrl.origin + '/',
+        requestUrl.origin + '/index.html',
+        requestUrl.href,
+        requestUrl.href.replace(/\/$/, ''),
+        requestUrl.href.replace(/\/$/, '') + '/index.html'
+    ];
+    
+    // Try cache first with all URL variations
+    for (const url of possibleUrls) {
+        try {
+            const cached = await cache.match(url);
+            if (cached) {
+                console.log('[Service Worker] Navigation served from cache:', url);
+                return cached;
+            }
+        } catch (e) {
+            // Continue trying other URLs
+        }
+    }
+    
+    // Try network if cache miss
+    try {
+        const response = await fetch(event.request);
+        if (response.ok) {
+            // Cache the navigation request for future offline use
+            cache.put(event.request, response.clone());
+            console.log('[Service Worker] Navigation cached:', event.request.url);
+        }
+        return response;
+    } catch (error) {
+        console.log('[Service Worker] Navigation network failed, serving offline:', event.request.url);
+        
+        // Try to serve offline.html from cache
+        const offlinePage = await cache.match('/offline.html');
+        if (offlinePage) {
+            return offlinePage;
+        }
+        
+        // Final fallback: inline HTML when even offline.html isn't cached
+        return new Response(getOfflineFallbackHTML(), {
+            status: 200,
+            statusText: 'OK',
+            headers: { 'Content-Type': 'text/html; charset=utf-8' }
+        });
+    }
+}
+
+// Basic offline fallback HTML - embedded to work when cache fails
+function getOfflineFallbackHTML() {
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Offline - Currents News</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            padding: 20px;
+        }
+        .container { text-align: center; max-width: 400px; }
+        .icon { font-size: 80px; margin-bottom: 24px; }
+        h1 { font-size: 28px; margin-bottom: 16px; }
+        p { font-size: 16px; opacity: 0.9; margin-bottom: 24px; line-height: 1.5; }
+        button {
+            background: white;
+            color: #2563eb;
+            border: none;
+            padding: 14px 32px;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        button:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+        .hint { margin-top: 20px; font-size: 13px; opacity: 0.7; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="icon">📰</div>
+        <h1>You're Offline</h1>
+        <p>Connect to the internet to browse the latest news articles.</p>
+        <button onclick="location.reload()">Retry Connection</button>
+        <p class="hint">Previously loaded articles may still be available.</p>
+    </div>
+</body>
+</html>`;
+}
 
 // API-first strategy: Try network first, then cache
 async function apiFirstStrategy(event) {
