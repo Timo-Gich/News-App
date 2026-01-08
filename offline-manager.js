@@ -687,9 +687,9 @@ class OfflineManager {
     // Manual Bulk Download Controller (User-Controlled, Large)
     async manualDownloadLatestPages(pageCount = 15) {
         try {
-            // Check if online - guard against offline calls
-            if (!navigator.onLine) {
-                this.showToast('You must be online to download articles. Please check your connection.', 'error');
+            // Check if online
+            if (!this.isOnline || !navigator.onLine) {
+                this.showToast('You must be online to download articles', 'error');
                 return false;
             }
 

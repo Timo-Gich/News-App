@@ -442,7 +442,7 @@ class CurrentsNewsApp {
             this.showOfflineLibrary();
         });
 
-        // Download offline button - with debounce to prevent spam
+        // Download offline button
         addIdListener('download-offline-btn', 'click', () => {
             this.downloadOfflineArticles();
         });
@@ -1379,18 +1379,6 @@ class CurrentsNewsApp {
 
     // ==================== DOWNLOAD OFFLINE ARTICLES ====================
     async downloadOfflineArticles() {
-        // FIX: Prevent spam clicks with debounce flag
-        if (this.downloadInProgress) {
-            this.showToast('Download already in progress...', 'warning');
-            return;
-        }
-
-        // FIX: Check online status upfront - don't even prompt if offline
-        if (!navigator.onLine) {
-            this.showToast('You must be online to download articles. Please check your connection.', 'error');
-            return;
-        }
-
         try {
             // Prompt user for number of pages to download
             const pageCount = prompt(
@@ -1411,9 +1399,6 @@ class CurrentsNewsApp {
                 return;
             }
 
-            // Set debounce flag
-            this.downloadInProgress = true;
-
             // Start manual download
             const success = await this.offlineManager.manualDownloadLatestPages(count);
             
@@ -1424,10 +1409,7 @@ class CurrentsNewsApp {
 
         } catch (error) {
             console.error('Download failed:', error);
-            this.showToast('Download failed: ' + error.message, 'error');
-        } finally {
-            // Clear debounce flag
-            this.downloadInProgress = false;
+            this.showToast('Download failed', 'error');
         }
     }
 }
