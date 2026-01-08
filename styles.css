@@ -134,16 +134,25 @@ h6 {
     position: sticky;
     top: 0;
     z-index: 1000;
-    height: var(--header-height);
+    min-height: var(--header-height);
     display: flex;
-    align-items: center;
+    align-items: stretch;
+    padding: 0;
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
 }
 
 .header .container {
     display: flex;
+    flex-wrap: wrap;
     justify-content: space-between;
     align-items: center;
     width: 100%;
+    max-width: 100%;
+    padding: 10px 15px;
+    margin: 0 auto;
+    gap: 15px;
 }
 
 .logo {
@@ -1754,4 +1763,184 @@ h6 {
     .progress-count {
         align-self: flex-end;
     }
+}
+
+
+/* ===== MOBILE HEADER FIXES ===== */
+
+
+/* Header layout for tablets and smaller screens */
+
+@media (max-width: 992px) {
+    .header .container {
+        padding: 10px 12px;
+        gap: 10px;
+    }
+    .logo {
+        gap: 8px;
+    }
+    .logo h1 {
+        font-size: 20px;
+    }
+    .logo i {
+        font-size: 24px;
+    }
+    .nav-menu {
+        gap: 10px;
+    }
+    .nav-link {
+        padding: 6px 10px;
+        font-size: 13px;
+    }
+    .nav-link i {
+        display: none;
+    }
+    .header-controls {
+        gap: 8px;
+    }
+    .language-selector select {
+        padding: 6px 8px;
+        font-size: 12px;
+    }
+    #download-offline-btn {
+        padding: 8px 12px;
+        font-size: 12px;
+    }
+    #download-offline-btn i {
+        display: none;
+    }
+}
+
+
+/* Header layout for mobile phones */
+
+@media (max-width: 768px) {
+    .header {
+        padding: 0;
+    }
+    .header .container {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        grid-template-rows: auto auto;
+        gap: 10px;
+        padding: 12px;
+    }
+    .logo {
+        grid-column: 1;
+        grid-row: 1;
+        justify-self: start;
+    }
+    .logo h1 {
+        font-size: 18px;
+    }
+    .logo i {
+        font-size: 22px;
+    }
+    .connection-status {
+        display: none;
+    }
+    .nav {
+        grid-column: 1 / -1;
+        grid-row: 2;
+        order: 3;
+        width: 100%;
+    }
+    .nav-toggle {
+        display: block;
+        padding: 8px 12px;
+        background: var(--bg-secondary);
+        border-radius: var(--border-radius-sm);
+        color: var(--text-color);
+    }
+    .nav-menu {
+        position: fixed;
+        top: calc(var(--header-height) + 5px);
+        left: 10px;
+        right: 10px;
+        background-color: var(--bg-color);
+        flex-direction: column;
+        padding: 15px;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+        border-radius: var(--border-radius);
+        display: none;
+        z-index: 9999;
+        max-height: calc(100vh - 150px);
+        overflow-y: auto;
+    }
+    .nav-menu.show {
+        display: flex;
+        animation: slideDown 0.2s ease;
+    }
+    .nav-link {
+        padding: 12px 15px;
+        font-size: 15px;
+        border-radius: var(--border-radius-sm);
+    }
+    .nav-link i {
+        display: inline-flex;
+        width: 24px;
+    }
+    .header-controls {
+        grid-column: 2;
+        grid-row: 1;
+        justify-self: end;
+        gap: 6px;
+    }
+    .offline-indicator {
+        display: none !important;
+    }
+    .theme-toggle {
+        padding: 6px;
+        font-size: 18px;
+    }
+    .language-selector select {
+        padding: 6px 8px;
+        font-size: 12px;
+        max-width: 80px;
+    }
+    #download-offline-btn {
+        padding: 8px 10px;
+        font-size: 11px;
+        white-space: nowrap;
+    }
+    #download-offline-btn i {
+        display: none;
+    }
+}
+
+
+/* Header layout for very small screens */
+
+@media (max-width: 480px) {
+    .header .container {
+        padding: 10px;
+    }
+    .logo h1 {
+        font-size: 16px;
+    }
+    .logo span {
+        font-size: 14px;
+    }
+    .header-controls {
+        gap: 4px;
+    }
+    .theme-toggle {
+        padding: 5px;
+        font-size: 16px;
+    }
+    .language-selector {
+        display: none;
+    }
+    #download-offline-btn {
+        padding: 8px 8px;
+        font-size: 10px;
+    }
+}
+
+
+/* Ensure nav menu appears above other content */
+
+.nav-menu.show {
+    z-index: 9999;
+    border: 1px solid var(--border-color);
 }
