@@ -981,6 +981,48 @@ h6 {
     }
 }
 
+/* Large Screen Header Optimization */
+@media (min-width: 1200px) {
+    .header .container {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        align-items: center;
+        gap: 20px;
+    }
+
+    .logo {
+        grid-column: 1;
+        justify-self: start;
+    }
+
+    .nav {
+        grid-column: 2;
+        justify-self: center;
+        width: 100%;
+    }
+
+    .nav-menu {
+        gap: 15px;
+        justify-content: center;
+    }
+
+    .nav-link {
+        padding: 6px 10px;
+        font-size: 13px;
+    }
+
+    .header-controls {
+        grid-column: 3;
+        justify-self: end;
+        gap: 12px;
+    }
+
+    #download-offline-btn {
+        padding: 8px 14px;
+        font-size: 13px;
+    }
+}
+
 
 /* Offline Library Modal - Full screen on mobile */
 
