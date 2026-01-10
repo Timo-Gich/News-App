@@ -1184,9 +1184,8 @@ class CurrentsNewsApp {
 
         // Use current articles if not provided
         const articlesToRender = articles || this.articles;
-        
-        // Calculate pagination for current articles
-        this.totalPages = Math.ceil(articlesToRender.length / this.pageSize);
+
+        // Pagination is already calculated in loadNews based on API metadata
         const startIndex = (this.currentPage - 1) * this.pageSize;
         const endIndex = startIndex + this.pageSize;
         const pageArticles = articlesToRender.slice(startIndex, endIndex);
