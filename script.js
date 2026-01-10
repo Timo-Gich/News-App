@@ -285,7 +285,7 @@ class CurrentsNewsApp {
             this.loadCategoryNews(this.currentCategory);
         });
 
-        // Search
+        // Search with debouncing
         addIdListener('search-btn', 'click', () => {
             this.performSearch();
         });
@@ -295,6 +295,18 @@ class CurrentsNewsApp {
                 this.performSearch();
             }
         });
+
+        // Add debounced search input listener
+        const searchInput = document.getElementById('search-input');
+        if (searchInput) {
+            searchInput.addEventListener('input', this.debounce((e) => {
+                const query = e.target.value.trim();
+                if (query.length >= 3) {
+                    // Auto-search after 3+ characters with 500ms delay
+                    this.debouncedPerformSearch(query);
+                }
+            }, 500));
+        }
 
         // Advanced filters toggle
         addIdListener('advanced-toggle', 'click', () => {
@@ -1400,9 +1412,67 @@ class CurrentsNewsApp {
         this.showToast('API key reset', 'info');
     }
 
-    performHistoricalSearch() {
-        // This method needs to be implemented
-        console.log('Performing historical search...');
+    async performHistoricalSearch() {
+        const searchInput = document.getElementById('historical-search');
+        const startDateInput = document.getElementById('historical-start-date');
+        const endDateInput = document.getElementById('historical-end-date');
+
+        const query = searchInput ? searchInput.value.trim() : '';
+        const startDate = startDateInput ? startDateInput.value : '';
+        const endDate = endDateInput ? endDateInput.value : '';
+
+        if (!query) {
+            this.showToast('Please enter a search term for historical search', 'warning');
+            return;
+        }
+
+        // Validate date range
+        if (!startDate || !endDate) {
+            this.showToast('Please set both start and end dates for historical search', 'warning');
+            return;
+        }
+
+        // Validate date range
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        const now = new Date();
+
+        if (start > end) {
+            this.showToast('Start date must be before end date', 'warning');
+            return;
+        }
+
+        if (end > now) {
+            this.showToast('End date cannot be in the future', 'warning');
+            return;
+        }
+
+        // Check if date range is reasonable (not too broad)
+        const daysDiff = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
+        if (daysDiff > 365) {
+            this.showToast('Date range cannot exceed 365 days for performance reasons', 'warning');
+            return;
+        }
+
+        this.searchQuery = query;
+        this.currentPage = 1;
+
+        console.log(`Performing historical search for "${query}" from ${startDate} to ${endDate} (${daysDiff} days)`);
+
+        // Show loading state
+        this.showToast('Searching historical news...', 'info');
+
+        await this.loadNews({
+            source: 'search',
+            query: query,
+            filters: {
+                start_date: startDate,
+                end_date: endDate,
+                category: '',
+                domain: ''
+            },
+            pageNum: 1
+        });
     }
 
     async fetchHistoricalNews(query, filters) {
@@ -1443,6 +1513,28 @@ class CurrentsNewsApp {
             console.error('Failed to fetch historical news:', error);
             throw error;
         }
+    }
+
+    // Utility method for debouncing function calls
+    debounce(func, delay) {
+        let timeoutId;
+        return function (...args) {
+            clearTimeout(timeoutId);
+            timeoutId = setTimeout(() => func.apply(this, args), delay);
+        };
+    }
+
+    // Debounced search method
+    async debouncedPerformSearch(query) {
+        this.searchQuery = query;
+        this.currentPage = 1;
+
+        await this.loadNews({
+            source: 'search',
+            query: query,
+            filters: this.filters,
+            pageNum: 1
+        });
     }
 
     truncateText(text, limit) {

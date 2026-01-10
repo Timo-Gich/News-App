@@ -867,4 +867,82 @@ class OfflineStorage {
     async setLastAutoDownloadTime(time) {
         return await this.setSetting('last_auto_download', time);
     }
+
+    // ===== SEARCH RESULT CACHING =====
+
+    async cacheSearchResults(query, filters, results, ttlMinutes = 30) {
+        if (!this.db || !query || !results) return false;
+
+        try {
+            const cacheKey = this._generateSearchCacheKey(query, filters);
+            const cacheData = {
+                query: query,
+                filters: filters,
+                results: results,
+                timestamp: Date.now(),
+                ttl: ttlMinutes * 60 * 1000, // Convert to milliseconds
+                count: results.length
+            };
+
+            await this.setSetting(`search_${cacheKey}`, cacheData);
+            console.log(`[SearchCache] Cached ${results.length} results for query: "${query}"`);
+            return true;
+        } catch (error) {
+            console.error('Error caching search results:', error);
+            return false;
+        }
+    }
+
+    async getCachedSearchResults(query, filters) {
+        if (!this.db || !query) return null;
+
+        try {
+            const cacheKey = this._generateSearchCacheKey(query, filters);
+            const cacheData = await this.getSetting(`search_${cacheKey}`);
+
+            if (!cacheData) return null;
+
+            // Check if cache is expired
+            const now = Date.now();
+            if (now - cacheData.timestamp > cacheData.ttl) {
+                // Cache expired, remove it
+                await this.setSetting(`search_${cacheKey}`, null);
+                return null;
+            }
+
+            console.log(`[SearchCache] Using cached results for query: "${query}" (${cacheData.count} results)`);
+            return cacheData.results;
+        } catch (error) {
+            console.error('Error getting cached search results:', error);
+            return null;
+        }
+    }
+
+    _generateSearchCacheKey(query, filters = {}) {
+        // Create a unique key based on query and filters
+        const filterParts = [];
+        if (filters.category) filterParts.push(`cat:${filters.category}`);
+        if (filters.domain) filterParts.push(`dom:${filters.domain}`);
+        if (filters.start_date) filterParts.push(`start:${filters.start_date}`);
+        if (filters.end_date) filterParts.push(`end:${filters.end_date}`);
+
+        const filterString = filterParts.length > 0 ? `_${filterParts.join('_')}` : '';
+        return btoa(`${query}${filterString}`).replace(/[^a-zA-Z0-9]/g, '').substring(0, 32);
+    }
+
+    async clearExpiredSearchCache() {
+        if (!this.db) return 0;
+
+        try {
+            // This would need to iterate through all settings and remove expired search caches
+            // For simplicity, we'll clear search caches older than 1 hour
+            console.log('[SearchCache] Clearing expired search cache');
+            // Implementation would require iterating through settings, which is complex in IndexedDB
+            // For now, we'll rely on TTL checks during retrieval
+            return 0;
+        } catch (error) {
+            console.error('Error clearing search cache:', error);
+            return 0;
+        }
+    }
 }

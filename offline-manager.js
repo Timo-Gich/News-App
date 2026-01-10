@@ -867,6 +867,87 @@ class OfflineManager {
 
         console.log(`[DataFetcher] Fetching ${source} (page ${pageNum}, online: ${this.isOnline})`);
 
+        // ===== SPECIAL HANDLING FOR SEARCH =====
+        if (source === 'search' && query) {
+            // Step 1: Try cached search results first
+            const cachedResults = await this.storage.getCachedSearchResults(query, filters);
+            if (cachedResults && cachedResults.length > 0) {
+                console.log(`[DataFetcher] Using cached search results for "${query}" (${cachedResults.length} articles)`);
+                return {
+                    articles: cachedResults,
+                    source: 'search_cache',
+                    pageNum: pageNum,
+                    isCached: true,
+                    totalResults: cachedResults.length
+                };
+            }
+
+            // Step 2: If online, perform API search
+            if (this.isOnline && apiKey && baseUrl) {
+                try {
+                    console.log(`[DataFetcher] Performing API search for "${query}"`);
+                    const apiResponse = await this._fetchFromAPI({
+                        source: 'search',
+                        query,
+                        filters,
+                        language,
+                        apiKey,
+                        baseUrl,
+                        pageNum,
+                        pageSize
+                    });
+
+                    if (apiResponse.articles && apiResponse.articles.length > 0) {
+                        // Cache search results for future use
+                        await this.storage.cacheSearchResults(query, filters, apiResponse.articles);
+
+                        console.log(`[DataFetcher] Search found ${apiResponse.articles.length} articles from API`);
+                        return {
+                            articles: apiResponse.articles,
+                            source: 'search_api',
+                            pageNum: pageNum,
+                            isCached: false,
+                            totalResults: apiResponse.totalResults,
+                            hasMore: apiResponse.hasMore
+                        };
+                    }
+                } catch (error) {
+                    console.warn(`[DataFetcher] Search API failed: ${error.message}`);
+                    // Fall through to offline search
+                }
+            }
+
+            // Step 3: Offline search fallback
+            try {
+                console.log(`[DataFetcher] Performing offline search for "${query}"`);
+                const offlineResults = await this.storage.searchOfflineArticles(query, filters);
+
+                if (offlineResults && offlineResults.length > 0) {
+                    console.log(`[DataFetcher] Offline search found ${offlineResults.length} articles`);
+                    return {
+                        articles: offlineResults,
+                        source: 'search_offline',
+                        pageNum: pageNum,
+                        isCached: true,
+                        totalResults: offlineResults.length
+                    };
+                }
+            } catch (error) {
+                console.warn(`[DataFetcher] Offline search failed: ${error.message}`);
+            }
+
+            // No search results found
+            return {
+                articles: [],
+                source: 'search_empty',
+                pageNum: pageNum,
+                isCached: false,
+                totalResults: 0
+            };
+        }
+
+        // ===== STANDARD ARTICLE FETCHING (non-search) =====
+
         // Step 1: Try to get cached page first (if offline or as fallback)
         if (!this.isOnline) {
             const cachedPage = await this.storage.getArticlesPage(pageNum, source);

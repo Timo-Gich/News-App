@@ -602,11 +602,44 @@ h6 {
 
 .historical-form {
     display: flex;
+    flex-direction: column;
     gap: 15px;
 }
 
-#historical-search {
+.historical-dates {
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+.date-group {
     flex: 1;
+    min-width: 200px;
+}
+
+.date-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 500;
+    color: var(--text-color);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.date-group input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-sm);
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    font-family: 'Roboto', sans-serif;
+    font-size: 14px;
+}
+
+#historical-search {
+    width: 100%;
     padding: 12px 15px;
     border: 1px solid var(--border-color);
     border-radius: var(--border-radius-sm);
