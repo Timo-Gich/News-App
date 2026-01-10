@@ -645,9 +645,18 @@ class CurrentsNewsApp {
         }
 
         try {
-            // Note: We would need to add a delete method to OfflineStorage
-            // For now, we'll just show a message
-            this.showToast('Article removal not implemented yet', 'warning');
+            // Delete the article from storage
+            const deleted = await this.offlineManager.storage.deleteArticle(articleId);
+
+            if (deleted) {
+                // Update stats and refresh the library view
+                await this.offlineManager.updateStats();
+                await this.loadOfflineLibrary();
+
+                this.showToast('Article removed from offline library', 'success');
+            } else {
+                this.showToast('Article not found', 'warning');
+            }
         } catch (error) {
             console.error('Failed to remove article:', error);
             this.showToast('Failed to remove article', 'error');
@@ -1284,8 +1293,68 @@ class CurrentsNewsApp {
     }
 
     shareArticle(article) {
-        // This method needs to be implemented
-        console.log('Sharing article:', article.title);
+        const shareData = {
+            title: article.title,
+            text: article.description || 'Check out this article',
+            url: article.url
+        };
+
+        // Check if Web Share API is supported and available
+        if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
+            try {
+                navigator.share(shareData)
+                    .then(() => {
+                        this.showToast('Article shared successfully!', 'success');
+                    })
+                    .catch((error) => {
+                        // User cancelled or error occurred
+                        if (error.name !== 'AbortError') {
+                            console.error('Share failed:', error);
+                            this.showToast('Failed to share article', 'error');
+                        }
+                    });
+            } catch (error) {
+                console.error('Share API error:', error);
+                this.fallbackShare(article);
+            }
+        } else {
+            // Fallback to clipboard sharing
+            this.fallbackShare(article);
+        }
+    }
+
+    async fallbackShare(article) {
+        try {
+            const shareText = `${article.title}\n\n${article.description || 'Check out this article'}\n\n${article.url}`;
+
+            // Try to copy to clipboard
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(shareText);
+                this.showToast('Article link copied to clipboard!', 'success');
+            } else {
+                // Fallback for older browsers - use document.execCommand
+                const textArea = document.createElement('textarea');
+                textArea.value = shareText;
+                textArea.style.position = 'fixed';
+                textArea.style.left = '-999999px';
+                textArea.style.top = '-999999px';
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+
+                const successful = document.execCommand('copy');
+                document.body.removeChild(textArea);
+
+                if (successful) {
+                    this.showToast('Article link copied to clipboard!', 'success');
+                } else {
+                    this.showToast('Unable to copy to clipboard. Please copy the URL manually.', 'warning');
+                }
+            }
+        } catch (error) {
+            console.error('Fallback share failed:', error);
+            this.showToast('Unable to share article. Please copy the URL manually.', 'error');
+        }
     }
 
     installPWA() {

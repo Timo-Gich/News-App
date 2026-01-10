@@ -692,6 +692,26 @@ class OfflineStorage {
         });
     }
 
+    async deleteArticle(articleId) {
+        if (!this.db) return false;
+
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction(['articles'], 'readwrite');
+            const store = transaction.objectStore('articles');
+            const request = store.delete(articleId);
+
+            request.onsuccess = () => {
+                console.log('Article deleted from IndexedDB:', articleId);
+                resolve(true);
+            };
+
+            request.onerror = (event) => {
+                console.error('Error deleting article:', event.target.error);
+                reject(event.target.error);
+            };
+        });
+    }
+
     async clearOldArticles(olderThanDays = 7) {
         if (!this.db) return 0;
 
