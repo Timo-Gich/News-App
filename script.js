@@ -1101,9 +1101,14 @@ class CurrentsNewsApp {
             // Store articles and pagination state
             this.articles = result.articles;
             this.currentPage = pageNum;
-            
-            // Calculate total pages
-            this.totalPages = Math.max(1, Math.ceil(result.articles.length / this.pageSize));
+
+            // Calculate total pages using API metadata if available
+            if (result.totalResults && result.totalResults > 0) {
+                this.totalPages = Math.max(1, Math.ceil(result.totalResults / this.pageSize));
+            } else {
+                // Fallback to local calculation
+                this.totalPages = Math.max(1, Math.ceil(result.articles.length / this.pageSize));
+            }
 
             // Render using unified logic
             this.renderArticles();

@@ -775,26 +775,28 @@ class OfflineManager {
     async downloadPageForOffline(pageNum, source, origin) {
         try {
             // Fetch articles for this page
-            const articles = await this._fetchFromAPI({
+            const apiResponse = await this._fetchFromAPI({
                 source: 'latest',
                 category: null,
                 query: null,
                 filters: {},
                 language: this.currentLanguage || 'en',
                 apiKey: this.apiKey,
-                baseUrl: this.baseUrl
+                baseUrl: this.baseUrl,
+                pageNum: pageNum,
+                pageSize: 12
             });
 
-            if (!articles || articles.length === 0) {
+            if (!apiResponse.articles || apiResponse.articles.length === 0) {
                 return { success: false, sizeMB: 0 };
             }
 
             // Cache the page
-            const cached = await this.storage.cacheArticlesPage(articles, pageNum, source, origin);
+            const cached = await this.storage.cacheArticlesPage(apiResponse.articles, pageNum, source, origin);
 
             if (cached) {
-                const sizeMB = this.storage.calculateArticlesSize(articles);
-                console.log(`[Download] Cached page ${pageNum} (${articles.length} articles, ${sizeMB.toFixed(2)}MB)`);
+                const sizeMB = this.storage.calculateArticlesSize(apiResponse.articles);
+                console.log(`[Download] Cached page ${pageNum} (${apiResponse.articles.length} articles, ${sizeMB.toFixed(2)}MB)`);
                 return { success: true, sizeMB: sizeMB };
             } else {
                 return { success: false, sizeMB: 0 };
@@ -882,26 +884,30 @@ class OfflineManager {
         // Step 2: If online, try API
         if (this.isOnline && apiKey && baseUrl) {
             try {
-                const articles = await this._fetchFromAPI({
+                const apiResponse = await this._fetchFromAPI({
                     source,
                     category,
                     query,
                     filters,
                     language,
                     apiKey,
-                    baseUrl
+                    baseUrl,
+                    pageNum,
+                    pageSize
                 });
 
-                if (articles && articles.length > 0) {
+                if (apiResponse.articles && apiResponse.articles.length > 0) {
                     // Cache this page for offline use
-                    await this.cacheArticlesPage(articles, pageNum, source);
+                    await this.cacheArticlesPage(apiResponse.articles, pageNum, source);
 
-                    console.log(`[DataFetcher] Fetched ${articles.length} articles from API`);
+                    console.log(`[DataFetcher] Fetched ${apiResponse.articles.length} articles from API`);
                     return {
-                        articles: articles,
+                        articles: apiResponse.articles,
                         source: 'api',
                         pageNum: pageNum,
-                        isCached: false
+                        isCached: false,
+                        totalResults: apiResponse.totalResults,
+                        hasMore: apiResponse.hasMore
                     };
                 }
             } catch (error) {
@@ -953,14 +959,14 @@ class OfflineManager {
 
     // ===== HELPER: Fetch from API with proper error handling =====
     async _fetchFromAPI(params) {
-        const { source, category, query, filters, language, apiKey, baseUrl } = params;
+        const { source, category, query, filters, language, apiKey, baseUrl, pageNum, pageSize } = params;
 
-        let url = `${baseUrl}/latest-news?language=${language}&apiKey=${apiKey}`;
+        let url = `${baseUrl}/latest-news?language=${language}&page=${pageNum}&page_size=${pageSize}&apiKey=${apiKey}`;
 
         if (source === 'category' && category) {
-            url = `${baseUrl}/latest-news?language=${language}&category=${encodeURIComponent(category)}&apiKey=${apiKey}`;
+            url = `${baseUrl}/latest-news?language=${language}&category=${encodeURIComponent(category)}&page=${pageNum}&page_size=${pageSize}&apiKey=${apiKey}`;
         } else if (source === 'search' && query) {
-            url = `${baseUrl}/search?language=${language}&keywords=${encodeURIComponent(query)}&apiKey=${apiKey}`;
+            url = `${baseUrl}/search?language=${language}&keywords=${encodeURIComponent(query)}&page=${pageNum}&page_size=${pageSize}&apiKey=${apiKey}`;
 
             if (filters.start_date && filters.end_date) {
                 url += `&start_date=${filters.start_date}&end_date=${filters.end_date}`;
@@ -983,7 +989,12 @@ class OfflineManager {
         }
 
         const data = await response.json();
-        return data.news || [];
+        return {
+            articles: data.news || [],
+            totalResults: data.totalResults || data.total || 0,
+            page: data.page || pageNum,
+            hasMore: data.hasMore || false
+        };
     }
 
     // ===== HELPER: Cache articles page for offline use =====
