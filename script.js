@@ -340,7 +340,7 @@ class CurrentsNewsApp {
         });
 
         addIdListener('next-page', 'click', () => {
-            if (this.currentPage < this.totalPages || this.hasMorePages !== false) {
+            if (this.hasMorePages !== false) {
                 this.currentPage++;
                 this.loadNews({
                     source: this.currentCategory,
@@ -1162,7 +1162,8 @@ class CurrentsNewsApp {
                 this.hasMorePages = true; // Default assumption
             }
 
-            this.totalPages = Math.max(1, Math.ceil(totalAvailable / this.pageSize));
+            // FIX 1: Kill fake totalPages - Currents API doesn't provide reliable totals
+            this.totalPages = null;
 
             // Render using unified logic
             this.renderArticles();
@@ -1220,33 +1221,19 @@ class CurrentsNewsApp {
         return url;
     }
 
-    async loadArticles() {
-        // This method loads the current page of articles
-        const startIndex = (this.currentPage - 1) * this.pageSize;
-        const endIndex = startIndex + this.pageSize;
-        const pageArticles = this.articles.slice(startIndex, endIndex);
-
-        this.renderArticles(pageArticles);
-
-        // Update pagination with context about data source
-        this.updatePagination();
-    }
+    // DEPRECATED: loadArticles() - No longer used with unified pagination
+    // Kept for backward compatibility but replaced by direct loadNews() calls
 
     renderArticles(articles = null) {
         const container = document.getElementById('news-grid');
         if (!container) return;
 
-        // Use current articles if not provided
+        // FIX 2: Stop slicing already-paged data - fetchArticles() already returns one page
         const articlesToRender = articles || this.articles;
-
-        // Pagination is already calculated in loadNews based on API metadata
-        const startIndex = (this.currentPage - 1) * this.pageSize;
-        const endIndex = startIndex + this.pageSize;
-        const pageArticles = articlesToRender.slice(startIndex, endIndex);
 
         container.innerHTML = '';
 
-        if (pageArticles.length === 0) {
+        if (articlesToRender.length === 0) {
             container.innerHTML = `
                 <div class="no-articles" style="text-align: center; padding: 40px 20px;">
                     <i class="fas fa-newspaper" style="font-size: 48px; color: var(--text-secondary); margin-bottom: 15px;"></i>
@@ -1257,7 +1244,7 @@ class CurrentsNewsApp {
             return;
         }
 
-        pageArticles.forEach(article => {
+        articlesToRender.forEach(article => {
             const card = this.createArticleCard(article);
             container.appendChild(card);
         });
@@ -1265,52 +1252,35 @@ class CurrentsNewsApp {
         this.updatePagination();
     }
 
+    // FIX 3: Rewrite updatePagination() properly for Currents API
     updatePagination() {
         const prevBtn = document.getElementById('prev-page');
         const nextBtn = document.getElementById('next-page');
         const loadMoreBtn = document.getElementById('load-more-btn');
         const pageInfo = document.getElementById('page-info');
-        const currentPageEl = document.getElementById('current-page');
-        const totalPagesEl = document.getElementById('total-pages');
 
-        if (!prevBtn || !nextBtn || !pageInfo) return;
+        if (!pageInfo) return;
 
         prevBtn.disabled = this.currentPage === 1;
 
-        // IMPROVED: Better pagination display with clear messaging
-        if (this.offlineMode || !navigator.onLine) {
-            // Offline mode - show article count instead of total pages
-            const articleCount = this.articles.length;
-            const startItem = (this.currentPage - 1) * this.pageSize + 1;
-            const endItem = Math.min(this.currentPage * this.pageSize, articleCount);
-
-            pageInfo.innerHTML = `Offline • Page ${this.currentPage} • ${articleCount} articles`;
-            nextBtn.disabled = endItem >= articleCount;
-            if (loadMoreBtn) loadMoreBtn.style.display = 'none'; // Hide Load More in offline mode
-
+        if (this.hasMorePages === false) {
+            // Explicitly no more pages - API said "no more"
+            pageInfo.textContent = `Page ${this.currentPage} • All articles loaded`;
+            nextBtn.disabled = true;
+            if (loadMoreBtn) loadMoreBtn.style.display = 'none';
         } else {
-            // Online mode - use new hasMorePages logic
-            if (this.totalPages > 1) {
-                // We know exact page count
-                pageInfo.innerHTML = `Page ${this.currentPage} of ${this.totalPages}`;
-                nextBtn.disabled = this.currentPage >= this.totalPages;
-                if (loadMoreBtn) loadMoreBtn.style.display = 'none'; // Hide Load More when we know exact count
-            } else if (this.hasMorePages === false) {
-                // Explicitly no more pages
-                pageInfo.innerHTML = `Page ${this.currentPage} • All loaded`;
-                nextBtn.disabled = true;
-                if (loadMoreBtn) loadMoreBtn.style.display = 'none'; // Hide Load More when no more content
-            } else {
-                // Assume more content exists - conservative approach
-                pageInfo.innerHTML = `Page ${this.currentPage} • More available`;
-                nextBtn.disabled = false; // Allow user to try loading more
-                if (loadMoreBtn) loadMoreBtn.style.display = 'inline-flex'; // Show Load More as alternative
-            }
+            // More content available or unknown - conservative approach
+            pageInfo.textContent = `Page ${this.currentPage} • More articles available`;
+            nextBtn.disabled = false;
+            if (loadMoreBtn) loadMoreBtn.style.display = 'inline-flex';
         }
 
-        // Update individual elements for screen readers
+        // FIX: Update hidden elements for screen readers (but don't show fake totals)
+        const currentPageEl = document.getElementById('current-page');
+        const totalPagesEl = document.getElementById('total-pages');
+
         if (currentPageEl) currentPageEl.textContent = this.currentPage;
-        if (totalPagesEl) totalPagesEl.textContent = this.totalPages;
+        if (totalPagesEl) totalPagesEl.textContent = ''; // Clear fake total
     }
 
     updateDateFilters() {
