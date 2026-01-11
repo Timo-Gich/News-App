@@ -1,5 +1,5 @@
 // offline-storage.js - IndexedDB wrapper for offline article storage
-// FIXED: Reliable getAll() + filter pattern instead of unreliable index queries
+
 class OfflineStorage {
     constructor() {
         this.dbName = 'CurrentsNewsDB';
@@ -134,7 +134,6 @@ class OfflineStorage {
         });
     }
 
-    // ===== FIX #1: Use getAll() + filter instead of unreliable index query =====
     async getOfflineArticles(limit = 100, offset = 0) {
         if (!this.db) return [];
 
@@ -166,7 +165,6 @@ class OfflineStorage {
         });
     }
 
-    // ===== FIX #2: Filter search results to only offline articles =====
     async searchArticles(query, filters = {}) {
         if (!this.db) return [];
 
@@ -430,7 +428,6 @@ class OfflineStorage {
         });
     }
 
-    // ===== FIX #3: Use getAll() + filter for reliable counting =====
     async getStorageStats() {
         if (!this.db) return null;
 
@@ -539,7 +536,6 @@ class OfflineStorage {
         });
     }
 
-    // ===== FIX #4: Use getAll() + filter for reliable pending action retrieval =====
     async getPendingActions() {
         if (!this.db) return [];
 

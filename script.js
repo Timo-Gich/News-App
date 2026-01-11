@@ -1,5 +1,4 @@
-// script.js - Updated Main Application with Offline Integration
-// Production-ready error handling and UI state management
+// script.js - Main News Application
 
 class CurrentsNewsApp {
     constructor() {
@@ -23,9 +22,6 @@ class CurrentsNewsApp {
         // Initialize offline manager
         this.offlineManager = new OfflineManager();
 
-        // ===== FIX #1: Delegate showToast to OfflineManager =====
-        // This prevents "this.showToast is not a function" errors
-        // Arrow function preserves lexical this, and bind ensures OfflineManager's this is correct
         this.showToast = this.offlineManager.showToast.bind(this.offlineManager);
 
         // Load existing bookmarks from localStorage for backward compatibility
@@ -42,12 +38,9 @@ class CurrentsNewsApp {
         // Set up theme first
         this.setTheme(this.isDarkMode);
 
-        // Initialize offline manager with proper error handling
         try {
             await this.offlineManager.init();
             console.log('Offline Manager initialized');
-
-            // Start auto-download for latest news (background, small)
             this.offlineManager.autoDownloadLatestPages();
         } catch (error) {
             console.warn('Offline Manager initialization failed:', error);
@@ -754,7 +747,6 @@ class CurrentsNewsApp {
         document.getElementById('offline-library-modal').classList.remove('show');
     }
 
-    // ==================== MODIFIED EXISTING METHODS ====================
     createArticleCard(article) {
         const card = document.createElement('div');
         card.className = 'news-card';
@@ -1093,7 +1085,6 @@ class CurrentsNewsApp {
         });
     }
 
-    // ===== NEW: Unified article loader (online/offline/cache) =====
     async loadNews(params = {}) {
         const {
             source = 'latest',
@@ -1293,7 +1284,6 @@ class CurrentsNewsApp {
         document.getElementById('loading').style.display = 'none';
     }
 
-    // ===== FIX #3: Proper error UI management =====
     showError(message) {
         document.getElementById('error-message').textContent = message;
         document.getElementById('error-container').style.display = 'block';

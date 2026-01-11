@@ -1,4 +1,5 @@
 // offline-manager.js - Main Coordinator for Offline Features
+
 class OfflineManager {
     constructor() {
         this.storage = new OfflineStorage();
