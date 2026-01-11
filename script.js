@@ -7,6 +7,7 @@ class CurrentsNewsApp {
         this.currentPage = 1;
         this.pageSize = 12;
         this.totalPages = 1;
+        this.hasMorePages = true; // Assume more content exists by default
         this.currentCategory = 'latest';
         this.currentLanguage = 'en';
         this.searchQuery = '';
@@ -328,14 +329,26 @@ class CurrentsNewsApp {
         addIdListener('prev-page', 'click', () => {
             if (this.currentPage > 1) {
                 this.currentPage--;
-                this.loadArticles();
+                this.loadNews({
+                    source: this.currentCategory,
+                    category: this.currentCategory,
+                    query: this.searchQuery,
+                    filters: this.filters,
+                    pageNum: this.currentPage
+                });
             }
         });
 
         addIdListener('next-page', 'click', () => {
-            if (this.currentPage < this.totalPages) {
+            if (this.currentPage < this.totalPages || this.hasMorePages !== false) {
                 this.currentPage++;
-                this.loadArticles();
+                this.loadNews({
+                    source: this.currentCategory,
+                    category: this.currentCategory,
+                    query: this.searchQuery,
+                    filters: this.filters,
+                    pageNum: this.currentPage
+                });
             }
         });
 
@@ -450,6 +463,11 @@ class CurrentsNewsApp {
         // Download offline button
         addIdListener('download-offline-btn', 'click', () => {
             this.downloadOfflineArticles();
+        });
+
+        // Load more button
+        addIdListener('load-more-btn', 'click', () => {
+            this.loadMoreArticles();
         });
 
         // Mobile menu toggle
@@ -1114,13 +1132,37 @@ class CurrentsNewsApp {
             this.articles = result.articles;
             this.currentPage = pageNum;
 
-            // Calculate total pages using API metadata if available
+            // IMPROVED: Better totalResults handling for pagination
+            let totalAvailable = 0;
+
             if (result.totalResults && result.totalResults > 0) {
-                this.totalPages = Math.max(1, Math.ceil(result.totalResults / this.pageSize));
+                // API provided total results - use exact count
+                totalAvailable = result.totalResults;
+                this.hasMorePages = result.totalResults > (pageNum * this.pageSize);
+            } else if (result.hasMore !== undefined) {
+                // Use hasMore flag for estimation
+                if (result.hasMore === false) {
+                    // API explicitly says no more content
+                    totalAvailable = pageNum * this.pageSize;
+                    this.hasMorePages = false;
+                } else {
+                    // API says more content exists - conservative estimate
+                    totalAvailable = Math.max(
+                        (pageNum + 2) * this.pageSize, // Assume at least 2 more pages
+                        100 // Minimum assumption of content availability
+                    );
+                    this.hasMorePages = true;
+                }
             } else {
-                // Fallback to local calculation
-                this.totalPages = Math.max(1, Math.ceil(result.articles.length / this.pageSize));
+                // No pagination info from API - assume more content exists
+                totalAvailable = Math.max(
+                    result.articles.length * 3, // Conservative multiplier
+                    50 // Minimum assumption
+                );
+                this.hasMorePages = true; // Default assumption
             }
+
+            this.totalPages = Math.max(1, Math.ceil(totalAvailable / this.pageSize));
 
             // Render using unified logic
             this.renderArticles();
@@ -1226,6 +1268,7 @@ class CurrentsNewsApp {
     updatePagination() {
         const prevBtn = document.getElementById('prev-page');
         const nextBtn = document.getElementById('next-page');
+        const loadMoreBtn = document.getElementById('load-more-btn');
         const pageInfo = document.getElementById('page-info');
         const currentPageEl = document.getElementById('current-page');
         const totalPagesEl = document.getElementById('total-pages');
@@ -1234,7 +1277,7 @@ class CurrentsNewsApp {
 
         prevBtn.disabled = this.currentPage === 1;
 
-        // Determine pagination display based on data source
+        // IMPROVED: Better pagination display with clear messaging
         if (this.offlineMode || !navigator.onLine) {
             // Offline mode - show article count instead of total pages
             const articleCount = this.articles.length;
@@ -1242,17 +1285,26 @@ class CurrentsNewsApp {
             const endItem = Math.min(this.currentPage * this.pageSize, articleCount);
 
             pageInfo.innerHTML = `Offline • Page ${this.currentPage} • ${articleCount} articles`;
-
-            // Disable next button if no more articles
             nextBtn.disabled = endItem >= articleCount;
-        } else {
-            // Online mode - show traditional pagination
-            nextBtn.disabled = this.currentPage >= this.totalPages;
+            if (loadMoreBtn) loadMoreBtn.style.display = 'none'; // Hide Load More in offline mode
 
-            if (this.totalPages === 1) {
-                pageInfo.innerHTML = `Page ${this.currentPage} • ${this.articles.length} articles`;
-            } else {
+        } else {
+            // Online mode - use new hasMorePages logic
+            if (this.totalPages > 1) {
+                // We know exact page count
                 pageInfo.innerHTML = `Page ${this.currentPage} of ${this.totalPages}`;
+                nextBtn.disabled = this.currentPage >= this.totalPages;
+                if (loadMoreBtn) loadMoreBtn.style.display = 'none'; // Hide Load More when we know exact count
+            } else if (this.hasMorePages === false) {
+                // Explicitly no more pages
+                pageInfo.innerHTML = `Page ${this.currentPage} • All loaded`;
+                nextBtn.disabled = true;
+                if (loadMoreBtn) loadMoreBtn.style.display = 'none'; // Hide Load More when no more content
+            } else {
+                // Assume more content exists - conservative approach
+                pageInfo.innerHTML = `Page ${this.currentPage} • More available`;
+                nextBtn.disabled = false; // Allow user to try loading more
+                if (loadMoreBtn) loadMoreBtn.style.display = 'inline-flex'; // Show Load More as alternative
             }
         }
 
@@ -1530,6 +1582,18 @@ class CurrentsNewsApp {
     truncateText(text, limit) {
         if (text.length <= limit) return text;
         return text.slice(0, limit) + '...';
+    }
+
+    // ==================== LOAD MORE FUNCTIONALITY ====================
+    async loadMoreArticles() {
+        this.currentPage++;
+        await this.loadNews({
+            source: this.currentCategory,
+            category: this.currentCategory,
+            query: this.searchQuery,
+            filters: this.filters,
+            pageNum: this.currentPage
+        });
     }
 
     // ==================== DOWNLOAD OFFLINE ARTICLES ====================
