@@ -1,4 +1,4 @@
-// offline-manager.js - Main Coordinator for Offline Features
+// offline-manager.js - Offline Download Manager (Simplified)
 
 class OfflineManager {
     constructor() {
@@ -15,13 +15,6 @@ class OfflineManager {
             storageUsage: 0,
             lastSync: null
         };
-    }
-
-    // Inject API configuration for offline downloads
-    setAPIConfig({ apiKey, baseUrl, language }) {
-        this.apiKey = apiKey;
-        this.baseUrl = baseUrl;
-        this.currentLanguage = language || 'en';
     }
 
     async init() {
@@ -614,7 +607,12 @@ class OfflineManager {
         }
     }
 
-    // ===== HYBRID OFFLINE DOWNLOAD SYSTEM =====
+    // ===== OFFLINE DOWNLOAD SYSTEM =====
+
+    // Initialize with API client reference for downloads
+    setAPIClient(apiClient) {
+        this.apiClient = apiClient;
+    }
 
     // Smart Auto-Download Controller (Background, Small)
     async autoDownloadLatestPages() {
@@ -632,22 +630,16 @@ class OfflineManager {
                 return;
             }
 
-            if (!navigator.onLine) {
-                console.log('[AutoDownload] Navigator offline, skipping');
-                return;
-            }
-
             // Check connection quality (Wi-Fi preferred)
             const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
             if (connection) {
-                // Skip if on cellular connection (unless explicitly allowed)
                 if (connection.effectiveType && connection.effectiveType.includes('2g')) {
                     console.log('[AutoDownload] Poor connection, skipping');
                     return;
                 }
             }
 
-            // Check battery level (if available)
+            // Check battery level
             if (navigator.getBattery) {
                 try {
                     const battery = await navigator.getBattery();
@@ -679,10 +671,8 @@ class OfflineManager {
             const successfulDownloads = results.filter(r => r.status === 'fulfilled').length;
 
             if (successfulDownloads > 0) {
-                // Mark auto-download as completed for this session
                 await this.storage.setSessionAutoDownloadStatus(true);
                 await this.storage.setLastAutoDownloadTime(new Date().toISOString());
-
                 console.log(`[AutoDownload] Completed: ${successfulDownloads} pages downloaded`);
                 this.showToast(`Auto-downloaded ${successfulDownloads} pages for offline reading`, 'success');
             }
@@ -693,131 +683,106 @@ class OfflineManager {
     }
 
     // Manual Bulk Download Controller (User-Controlled, Large)
-    async manualDownloadLatestPages(pageCount = 15) {
+    async downloadPages(category = 'latest', pageCount = 15) {
         try {
-            // Check if online
             if (!this.isOnline || !navigator.onLine) {
-                this.showToast('You must be online to download articles', 'error');
-                return false;
+                throw new Error('Must be online to download articles');
+            }
+
+            if (!this.apiClient) {
+                throw new Error('API client not configured');
             }
 
             // Check storage quota
             const storageUsage = await this.storage.estimateStorageUsage();
             if (storageUsage.percentage > 80) {
-                this.showToast('Storage nearly full. Please clear some space first.', 'warning');
-                return false;
+                throw new Error('Storage nearly full');
             }
 
-            // Estimate download size
-            const sizeEstimate = await this.storage.estimateDownloadSize(pageCount);
-            const proceed = confirm(
-                `Download ${pageCount} pages (${sizeEstimate.sizeText})?\n\n` +
-                `Estimated: ${sizeEstimate.articles} articles\n` +
-                `Storage used: ${sizeEstimate.sizeText}\n\n` +
-                `This will download the latest news pages for offline reading.`
-            );
-
-            if (!proceed) {
-                return false;
-            }
-
-            console.log(`[ManualDownload] Starting download of ${pageCount} pages`);
+            console.log(`[Download] Starting bulk download: ${pageCount} pages of ${category}`);
 
             // Show progress UI
             this.showDownloadProgress(true, 0, pageCount);
 
             let downloadedPages = 0;
             let totalSizeMB = 0;
-            let cancelled = false;
+            let downloadedArticles = [];
 
             // Download pages sequentially
             for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
-                // Check if cancelled
-                if (cancelled) {
-                    console.log('[ManualDownload] Cancelled by user');
-                    this.showToast('Download cancelled', 'info');
-                    break;
-                }
-
                 try {
-                    const result = await this.downloadPageForOffline(pageNum, 'latest', 'manual');
+                    const result = await this.downloadPageForOffline(pageNum, category, 'manual');
                     if (result.success) {
                         downloadedPages++;
                         totalSizeMB += result.sizeMB;
+                        downloadedArticles.push(...result.articles);
 
                         // Update progress
                         this.updateDownloadProgress(downloadedPages, pageCount, result.sizeMB);
-                    } else {
-                        console.log(`[ManualDownload] Failed to download page ${pageNum}`);
                     }
                 } catch (error) {
-                    console.error(`[ManualDownload] Error downloading page ${pageNum}:`, error);
+                    console.error(`[Download] Failed to download page ${pageNum}:`, error);
                 }
             }
 
             // Hide progress UI
             this.showDownloadProgress(false);
 
-            if (downloadedPages > 0) {
-                this.showToast(
-                    `Downloaded ${downloadedPages} pages (${totalSizeMB.toFixed(1)} MB)`,
-                    'success'
-                );
+            // Update stats
+            await this.updateStats();
 
-                // Update stats
-                await this.updateStats();
-                return true;
-            } else {
-                this.showToast('No pages were downloaded', 'warning');
-                return false;
-            }
+            return {
+                downloadedPages,
+                totalSizeMB,
+                downloadedArticles: downloadedArticles.length,
+                success: downloadedPages > 0
+            };
 
         } catch (error) {
-            console.error('[ManualDownload] Failed:', error);
-            this.showToast('Download failed', 'error');
-            return false;
+            console.error('[Download] Bulk download failed:', error);
+            this.showDownloadProgress(false);
+            throw error;
         }
     }
 
     // Helper: Download a single page for offline
-    async downloadPageForOffline(pageNum, source, origin) {
+    async downloadPageForOffline(pageNum, category = 'latest', origin = 'manual') {
         try {
-            // Defensive guard: Check if API config is available
-            if (!this.apiKey || !this.baseUrl) {
-                throw new Error('API not configured for offline download');
+            if (!this.apiClient) {
+                throw new Error('API client not available');
             }
 
-            // Fetch articles for this page
-            const apiResponse = await this._fetchFromAPI({
-                source: source,
-                category: null,
-                query: null,
-                filters: {},
-                language: this.currentLanguage || 'en',
-                apiKey: this.apiKey,
-                baseUrl: this.baseUrl,
-                pageNum: pageNum,
-                pageSize: 12
+            // Fetch articles for this page using API client
+            const apiResponse = await this.apiClient.fetchArticles({
+                page: pageNum,
+                category: category,
+                filters: {}
             });
 
             if (!apiResponse.articles || apiResponse.articles.length === 0) {
-                return { success: false, sizeMB: 0 };
+                return { success: false, sizeMB: 0, articles: [] };
             }
 
-            // Cache the page
-            const cached = await this.storage.cacheArticlesPage(apiResponse.articles, pageNum, source, origin);
-
-            if (cached) {
-                const sizeMB = this.storage.calculateArticlesSize(apiResponse.articles);
-                console.log(`[Download] Cached page ${pageNum} (${apiResponse.articles.length} articles, ${sizeMB.toFixed(2)}MB)`);
-                return { success: true, sizeMB: sizeMB };
-            } else {
-                return { success: false, sizeMB: 0 };
+            // Save articles to offline storage
+            for (const article of apiResponse.articles) {
+                await this.storage.saveArticle(article, true);
             }
+
+            // Cache the page for faster access
+            await this.storage.cacheArticlesPage(apiResponse.articles, pageNum, category, origin);
+
+            const sizeMB = this.storage.calculateArticlesSize(apiResponse.articles);
+            console.log(`[Download] Cached page ${pageNum} (${apiResponse.articles.length} articles, ${sizeMB.toFixed(2)}MB)`);
+
+            return {
+                success: true,
+                sizeMB: sizeMB,
+                articles: apiResponse.articles
+            };
 
         } catch (error) {
             console.error(`[Download] Failed to download page ${pageNum}:`, error);
-            return { success: false, sizeMB: 0 };
+            return { success: false, sizeMB: 0, articles: [] };
         }
     }
 
@@ -864,243 +829,5 @@ class OfflineManager {
         // Implementation would need to track active downloads
     }
 
-    // ===== UNIFIED DATA FETCHER: Online/Offline/Cache Pipeline =====
-    async fetchArticles(params = {}) {
-        const {
-            source = 'latest', // 'latest', 'category', 'search'
-                category = null,
-                query = null,
-                filters = {},
-                pageNum = 1,
-                pageSize = 12,
-                language = 'en',
-                apiKey = null,
-                baseUrl = null
-        } = params;
-
-        console.log(`[DataFetcher] Fetching ${source} (page ${pageNum}, online: ${this.isOnline})`);
-
-        // ===== SPECIAL HANDLING FOR SEARCH =====
-        if (source === 'search' && query) {
-            // Step 1: Try cached search results first
-            const cachedResults = await this.storage.getCachedSearchResults(query, filters);
-            if (cachedResults && cachedResults.length > 0) {
-                console.log(`[DataFetcher] Using cached search results for "${query}" (${cachedResults.length} articles)`);
-                return {
-                    articles: cachedResults,
-                    source: 'search_cache',
-                    pageNum: pageNum,
-                    isCached: true,
-                    totalResults: cachedResults.length
-                };
-            }
-
-            // Step 2: If online, perform API search
-            if (this.isOnline && apiKey && baseUrl) {
-                try {
-                    console.log(`[DataFetcher] Performing API search for "${query}"`);
-                    const apiResponse = await this._fetchFromAPI({
-                        source: 'search',
-                        query,
-                        filters,
-                        language,
-                        apiKey,
-                        baseUrl,
-                        pageNum,
-                        pageSize
-                    });
-
-                    if (apiResponse.articles && apiResponse.articles.length > 0) {
-                        // Cache search results for future use
-                        await this.storage.cacheSearchResults(query, filters, apiResponse.articles);
-
-                        console.log(`[DataFetcher] Search found ${apiResponse.articles.length} articles from API`);
-                        return {
-                            articles: apiResponse.articles,
-                            source: 'search_api',
-                            pageNum: pageNum,
-                            isCached: false,
-                            totalResults: apiResponse.totalResults,
-                            hasMore: apiResponse.hasMore
-                        };
-                    }
-                } catch (error) {
-                    console.warn(`[DataFetcher] Search API failed: ${error.message}`);
-                    // Fall through to offline search
-                }
-            }
-
-            // Step 3: Offline search fallback
-            try {
-                console.log(`[DataFetcher] Performing offline search for "${query}"`);
-                const offlineResults = await this.storage.searchOfflineArticles(query, filters);
-
-                if (offlineResults && offlineResults.length > 0) {
-                    console.log(`[DataFetcher] Offline search found ${offlineResults.length} articles`);
-                    return {
-                        articles: offlineResults,
-                        source: 'search_offline',
-                        pageNum: pageNum,
-                        isCached: true,
-                        totalResults: offlineResults.length
-                    };
-                }
-            } catch (error) {
-                console.warn(`[DataFetcher] Offline search failed: ${error.message}`);
-            }
-
-            // No search results found
-            return {
-                articles: [],
-                source: 'search_empty',
-                pageNum: pageNum,
-                isCached: false,
-                totalResults: 0
-            };
-        }
-
-        // ===== STANDARD ARTICLE FETCHING (non-search) =====
-
-        // Step 1: Try to get cached page first (if offline or as fallback)
-        if (!this.isOnline) {
-            const cachedPage = await this.storage.getArticlesPage(pageNum, source);
-            if (cachedPage && cachedPage.length > 0) {
-                console.log(`[DataFetcher] Using cached page ${pageNum} (${cachedPage.length} articles)`);
-                return {
-                    articles: cachedPage,
-                    source: 'cache',
-                    pageNum: pageNum,
-                    isCached: true
-                };
-            }
-        }
-
-        // Step 2: If online, try API
-        if (this.isOnline && apiKey && baseUrl) {
-            try {
-                const apiResponse = await this._fetchFromAPI({
-                    source,
-                    category,
-                    query,
-                    filters,
-                    language,
-                    apiKey,
-                    baseUrl,
-                    pageNum,
-                    pageSize
-                });
-
-                if (apiResponse.articles && apiResponse.articles.length > 0) {
-                    // Cache this page for offline use
-                    await this.cacheArticlesPage(apiResponse.articles, pageNum, source);
-
-                    console.log(`[DataFetcher] Fetched ${apiResponse.articles.length} articles from API`);
-                    return {
-                        articles: apiResponse.articles,
-                        source: 'api',
-                        pageNum: pageNum,
-                        isCached: false,
-                        totalResults: apiResponse.totalResults,
-                        hasMore: apiResponse.hasMore
-                    };
-                }
-            } catch (error) {
-                console.warn(`[DataFetcher] API fetch failed: ${error.message}`);
-                // Fall through to offline fallback
-            }
-        }
-
-        // Step 3: Fallback: Try IndexedDB (all saved articles)
-        try {
-            const offlineArticles = await this.storage.getOfflineArticles(pageSize, (pageNum - 1) * pageSize);
-            if (offlineArticles && offlineArticles.length > 0) {
-                console.log(`[DataFetcher] Using IndexedDB fallback (${offlineArticles.length} articles)`);
-                return {
-                    articles: offlineArticles,
-                    source: 'offline',
-                    pageNum: pageNum,
-                    isCached: true
-                };
-            }
-        } catch (error) {
-            console.warn(`[DataFetcher] IndexedDB fallback failed: ${error.message}`);
-        }
-
-        // Step 4: Try cached pages from latest news
-        try {
-            const cachedPages = await this.storage.getAllCachedPages('latest');
-            if (cachedPages.length > 0) {
-                // Merge all cached pages into one array
-                const allCachedArticles = cachedPages.flatMap(page => page.articles);
-
-                if (allCachedArticles.length > 0) {
-                    console.log(`[DataFetcher] Using cached pages (${allCachedArticles.length} articles)`);
-                    return {
-                        articles: allCachedArticles,
-                        source: 'cached_pages',
-                        pageNum: pageNum,
-                        isCached: true
-                    };
-                }
-            }
-        } catch (error) {
-            console.warn(`[DataFetcher] Cached pages fallback failed: ${error.message}`);
-        }
-
-        // No data available
-        throw new Error('No articles available (offline and no cache)');
-    }
-
-    // ===== HELPER: Fetch from API with proper error handling =====
-    async _fetchFromAPI(params) {
-        const { source, category, query, filters, language, apiKey, baseUrl, pageNum, pageSize } = params;
-
-        let url = `${baseUrl}/latest-news?language=${language}&page=${pageNum}&page_size=${pageSize}&apiKey=${apiKey}`;
-
-        if (source === 'category' && category) {
-            url = `${baseUrl}/latest-news?language=${language}&category=${encodeURIComponent(category)}&page=${pageNum}&page_size=${pageSize}&apiKey=${apiKey}`;
-        } else if (source === 'search' && query) {
-            url = `${baseUrl}/search?language=${language}&keywords=${encodeURIComponent(query)}&page=${pageNum}&page_size=${pageSize}&apiKey=${apiKey}`;
-
-            if (filters.start_date && filters.end_date) {
-                url += `&start_date=${filters.start_date}&end_date=${filters.end_date}`;
-            }
-            if (filters.domain) {
-                url += `&domain=${encodeURIComponent(filters.domain)}`;
-            }
-            if (filters.category) {
-                url += `&category=${encodeURIComponent(filters.category)}`;
-            }
-        }
-
-        const response = await fetch(url);
-
-        if (!response.ok) {
-            if (response.status === 401) {
-                throw new Error('Invalid API key');
-            }
-            throw new Error(`API Error: ${response.status}`);
-        }
-
-        const data = await response.json();
-        return {
-            articles: data.news || [],
-            totalResults: data.totalResults || data.total || 0,
-            page: data.page || pageNum,
-            hasMore: data.hasMore || false
-        };
-    }
-
-    // ===== HELPER: Cache articles page for offline use =====
-    async cacheArticlesPage(articles, pageNum, source) {
-        if (!articles || articles.length === 0) return;
-
-        try {
-            // Store page metadata for retrieval
-            await this.storage.cacheArticlesPage(articles, pageNum, source);
-            console.log(`[DataFetcher] Cached page ${pageNum} for source "${source}"`);
-        } catch (error) {
-            console.warn(`[DataFetcher] Failed to cache page: ${error.message}`);
-        }
-    }
+    // ===== END OF OFFLINEMANAGER =====
 }

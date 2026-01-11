@@ -1,13 +1,13 @@
-// script.js - Main News Application
+// script.js - UI Layer for News Application
 
 class CurrentsNewsApp {
     constructor() {
-        this.apiKey = null;
-        this.baseUrl = 'https://api.currentsapi.services/v1';
-        this.currentPage = 1;
-        this.pageSize = 12;
-        this.totalPages = 1;
-        this.hasMorePages = true; // Assume more content exists by default
+        // Services
+        this.articleService = null;
+        this.apiClient = null;
+        this.offlineManager = null;
+
+        // UI State
         this.currentCategory = 'latest';
         this.currentLanguage = 'en';
         this.searchQuery = '';
@@ -19,14 +19,9 @@ class CurrentsNewsApp {
             keywords: ''
         };
         this.articles = [];
+        this.hasMorePages = true;
 
-        // Initialize offline manager
-        this.offlineManager = new OfflineManager();
-
-        this.showToast = this.offlineManager.showToast.bind(this.offlineManager);
-
-        // Load existing bookmarks from localStorage for backward compatibility
-        this.bookmarks = JSON.parse(localStorage.getItem('currents_bookmarks') || '[]');
+        // UI elements
         this.isDarkMode = localStorage.getItem('darkMode') === 'true';
         this.deferredPrompt = null;
 
@@ -39,26 +34,15 @@ class CurrentsNewsApp {
         // Set up theme first
         this.setTheme(this.isDarkMode);
 
-        try {
-            await this.offlineManager.init();
-            console.log('Offline Manager initialized');
-            this.offlineManager.autoDownloadLatestPages();
-        } catch (error) {
-            console.warn('Offline Manager initialization failed:', error);
-        }
+        // Initialize services
+        await this.initServices();
 
         // Check for saved API key
         const savedKey = localStorage.getItem('currents_api_key');
         if (savedKey) {
-            this.apiKey = savedKey;
-            // Inject API config into offline manager
-            this.offlineManager.setAPIConfig({
-                apiKey: this.apiKey,
-                baseUrl: this.baseUrl,
-                language: this.currentLanguage
-            });
+            await this.setupAPIClient(savedKey);
             this.hideApiKeyModal();
-            this.loadLatestNews();
+            await this.loadLatestNews();
         } else {
             this.showApiKeyModal();
         }
@@ -69,15 +53,48 @@ class CurrentsNewsApp {
         // Update dates for filters
         this.updateDateFilters();
 
-        // Update stats
-        try {
-            await this.offlineManager.updateStats();
-        } catch (error) {
-            console.warn('Failed to update stats:', error);
-        }
-
         // Enhanced error handling for GitHub Pages
         this.setupGitHubPagesErrorHandling();
+    }
+
+    async initServices() {
+        try {
+            // Create service instances
+            this.offlineManager = new OfflineManager();
+            this.apiClient = new APIClient('https://api.currentsapi.services/v1', null);
+            this.articleService = new ArticleService();
+
+            // Initialize offline manager first
+            await this.offlineManager.init();
+            console.log('Offline Manager initialized');
+
+            // Connect services
+            this.offlineManager.setAPIClient(this.apiClient);
+            this.articleService.init(this.apiClient, this.offlineManager, this.offlineManager.storage);
+
+            // Set up toast function
+            this.showToast = this.offlineManager.showToast.bind(this.offlineManager);
+
+            // Start auto-download
+            this.offlineManager.autoDownloadLatestPages();
+
+            // Update stats
+            await this.offlineManager.updateStats();
+
+        } catch (error) {
+            console.warn('Service initialization failed:', error);
+        }
+    }
+
+    async setupAPIClient(apiKey) {
+        this.apiClient.setAPIConfig({
+            apiKey: apiKey,
+            baseUrl: 'https://api.currentsapi.services/v1',
+            language: this.currentLanguage
+        });
+
+        // Update article service language
+        this.articleService.setLanguage(this.currentLanguage);
     }
 
     // ==================== GITHUB PAGES ERROR HANDLING ====================
@@ -1121,65 +1138,43 @@ class CurrentsNewsApp {
         this.showLoading();
 
         try {
-            // Use unified data fetcher
-            const result = await this.offlineManager.fetchArticles({
-                source: source,
+            // Use ArticleService - the single point of contact for articles
+            const result = await this.articleService.getArticles({
+                page: pageNum,
                 category: category,
                 query: query,
-                filters: filters,
-                pageNum: pageNum,
-                pageSize: this.pageSize,
-                language: this.currentLanguage,
-                apiKey: this.apiKey,
-                baseUrl: this.baseUrl
+                filters: filters
             });
 
             // Store articles and pagination state
             this.articles = result.articles;
             this.currentPage = pageNum;
 
-            // IMPROVED: Better totalResults handling for pagination
-            let totalAvailable = 0;
-
-            if (result.totalResults && result.totalResults > 0) {
-                // API provided total results - use exact count
-                totalAvailable = result.totalResults;
-                this.hasMorePages = result.totalResults > (pageNum * this.pageSize);
-            } else if (result.hasMore !== undefined) {
-                // Use hasMore flag for estimation
-                if (result.hasMore === false) {
-                    // API explicitly says no more content
-                    totalAvailable = pageNum * this.pageSize;
-                    this.hasMorePages = false;
-                } else {
-                    // API says more content exists - conservative estimate
-                    totalAvailable = Math.max(
-                        (pageNum + 2) * this.pageSize, // Assume at least 2 more pages
-                        100 // Minimum assumption of content availability
-                    );
-                    this.hasMorePages = true;
-                }
+            // Handle pagination based on result
+            if (result.hasMore === false) {
+                // API explicitly says no more content
+                this.hasMorePages = false;
+            } else if (result.totalResults && result.totalResults > 0) {
+                // API provided total results
+                this.hasMorePages = result.totalResults > (pageNum * 12); // Assume 12 articles per page
             } else {
-                // No pagination info from API - assume more content exists
-                totalAvailable = Math.max(
-                    result.articles.length * 3, // Conservative multiplier
-                    50 // Minimum assumption
-                );
-                this.hasMorePages = true; // Default assumption
+                // Default: assume more content available
+                this.hasMorePages = true;
             }
 
-            // FIX 1: Kill fake totalPages - Currents API doesn't provide reliable totals
-            this.totalPages = null;
-
-            // Render using unified logic
+            // Render articles
             this.renderArticles();
             this.hideLoading();
             this.updateStats();
             this.hideError();
 
-            // Show appropriate toast
-            const sourceLabel = result.source === 'api' ? 'online' : 
-                               result.source === 'cache' ? 'cached' : 'offline';
+            // Show appropriate toast based on data source
+            const sourceLabel = result.source === 'api' ? 'online' :
+                               result.source === 'cache' ? 'cached' :
+                               result.source === 'offline' ? 'offline' :
+                               result.source === 'search_api' ? 'search results' :
+                               result.source === 'search_cache' ? 'cached search' :
+                               result.source === 'search_offline' ? 'offline search' : 'articles';
             const message = `Loaded ${result.articles.length} articles (${sourceLabel})`;
             this.showToast(message, result.isCached ? 'warning' : 'success');
 
@@ -1412,14 +1407,9 @@ class CurrentsNewsApp {
         if (saveChecked) {
             localStorage.setItem('currents_api_key', apiKey);
         }
-        this.apiKey = apiKey;
 
-        // Inject API config into offline manager
-        this.offlineManager.setAPIConfig({
-            apiKey: this.apiKey,
-            baseUrl: this.baseUrl,
-            language: this.currentLanguage
-        });
+        // Configure API client
+        this.setupAPIClient(apiKey);
 
         this.hideApiKeyModal();
         this.loadLatestNews();
@@ -1602,17 +1592,23 @@ class CurrentsNewsApp {
                 return;
             }
 
-            // Start manual download
-            const success = await this.offlineManager.manualDownloadLatestPages(count);
-            
-            if (success) {
+            // Start manual download using ArticleService
+            const result = await this.articleService.downloadForOffline({
+                category: 'latest',
+                pages: count
+            });
+
+            if (result.success) {
+                this.showToast(`Downloaded ${result.downloadedPages} pages (${result.totalSizeMB.toFixed(1)} MB)`, 'success');
                 // Refresh the current view to show downloaded articles
                 await this.loadLatestNews();
+            } else {
+                this.showToast('Download failed', 'error');
             }
 
         } catch (error) {
             console.error('Download failed:', error);
-            this.showToast('Download failed', 'error');
+            this.showToast('Download failed: ' + error.message, 'error');
         }
     }
 }
