@@ -51,6 +51,12 @@ class CurrentsNewsApp {
         const savedKey = localStorage.getItem('currents_api_key');
         if (savedKey) {
             this.apiKey = savedKey;
+            // Inject API config into offline manager
+            this.offlineManager.setAPIConfig({
+                apiKey: this.apiKey,
+                baseUrl: this.baseUrl,
+                language: this.currentLanguage
+            });
             this.hideApiKeyModal();
             this.loadLatestNews();
         } else {
@@ -1397,16 +1403,24 @@ class CurrentsNewsApp {
     saveApiKey() {
         const apiKey = document.getElementById('api-key-input').value;
         const saveChecked = document.getElementById('save-api-key').checked;
-        
+
         if (!apiKey) {
             this.showToast('Please enter an API key', 'error');
             return;
         }
-        
+
         if (saveChecked) {
             localStorage.setItem('currents_api_key', apiKey);
         }
         this.apiKey = apiKey;
+
+        // Inject API config into offline manager
+        this.offlineManager.setAPIConfig({
+            apiKey: this.apiKey,
+            baseUrl: this.baseUrl,
+            language: this.currentLanguage
+        });
+
         this.hideApiKeyModal();
         this.loadLatestNews();
         this.showToast('API key saved successfully', 'success');

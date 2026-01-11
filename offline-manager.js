@@ -17,6 +17,13 @@ class OfflineManager {
         };
     }
 
+    // Inject API configuration for offline downloads
+    setAPIConfig({ apiKey, baseUrl, language }) {
+        this.apiKey = apiKey;
+        this.baseUrl = baseUrl;
+        this.currentLanguage = language || 'en';
+    }
+
     async init() {
         console.log('Initializing Offline Manager...');
 
@@ -775,9 +782,14 @@ class OfflineManager {
     // Helper: Download a single page for offline
     async downloadPageForOffline(pageNum, source, origin) {
         try {
+            // Defensive guard: Check if API config is available
+            if (!this.apiKey || !this.baseUrl) {
+                throw new Error('API not configured for offline download');
+            }
+
             // Fetch articles for this page
             const apiResponse = await this._fetchFromAPI({
-                source: 'latest',
+                source: source,
                 category: null,
                 query: null,
                 filters: {},
