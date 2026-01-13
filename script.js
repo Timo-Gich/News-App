@@ -21,6 +21,9 @@ class CurrentsNewsApp {
         this.articles = [];
         this.hasMorePages = true;
 
+        // Fetch lock to prevent concurrent API calls
+        this.isFetching = false;
+
         // UI elements
         this.isDarkMode = localStorage.getItem('darkMode') === 'true';
         this.deferredPrompt = null;
@@ -1142,6 +1145,12 @@ class CurrentsNewsApp {
     }
 
     async loadNews(params = {}) {
+        // CRITICAL: Prevent concurrent fetches that cause reloading loops
+        if (this.isFetching) {
+            console.log('[UI] Fetch already in progress, skipping duplicate request');
+            return;
+        }
+
         const {
             source = 'latest',
             category = null,
@@ -1150,6 +1159,7 @@ class CurrentsNewsApp {
             pageNum = 1
         } = params;
 
+        this.isFetching = true;
         this.showLoading();
 
         try {
@@ -1201,6 +1211,9 @@ class CurrentsNewsApp {
             }
 
             this.showError(`Failed to load news: ${error.message}`);
+        } finally {
+            // CRITICAL: Always reset the fetch lock
+            this.isFetching = false;
         }
     }
 
@@ -1265,35 +1278,25 @@ class CurrentsNewsApp {
         this.updatePagination();
     }
 
-    // FIX 3: Rewrite updatePagination() properly for Currents API
+    // Clean pagination - only shows current page and load more when available
     updatePagination() {
-        const prevBtn = document.getElementById('prev-page');
-        const nextBtn = document.getElementById('next-page');
         const loadMoreBtn = document.getElementById('load-more-btn');
         const pageInfo = document.getElementById('page-info');
 
         if (!pageInfo) return;
 
-        prevBtn.disabled = this.currentPage === 1;
-
-        if (this.hasMorePages === false) {
-            // Explicitly no more pages - API said "no more"
-            pageInfo.textContent = `Page ${this.currentPage} • All articles loaded`;
-            nextBtn.disabled = true;
-            if (loadMoreBtn) loadMoreBtn.style.display = 'none';
+        // Simple pagination visibility rule
+        if (this.hasMorePages) {
+            loadMoreBtn.style.display = 'block';
+            pageInfo.textContent = `Page ${this.currentPage}`;
         } else {
-            // More content available or unknown - conservative approach
-            pageInfo.textContent = `Page ${this.currentPage} • More articles available`;
-            nextBtn.disabled = false;
-            if (loadMoreBtn) loadMoreBtn.style.display = 'inline-flex';
+            loadMoreBtn.style.display = 'none';
+            pageInfo.textContent = `Page ${this.currentPage} • All articles loaded`;
         }
 
-        // FIX: Update hidden elements for screen readers (but don't show fake totals)
+        // Update current page display
         const currentPageEl = document.getElementById('current-page');
-        const totalPagesEl = document.getElementById('total-pages');
-
         if (currentPageEl) currentPageEl.textContent = this.currentPage;
-        if (totalPagesEl) totalPagesEl.textContent = ''; // Clear fake total
     }
 
     updateDateFilters() {
