@@ -313,16 +313,31 @@ class CurrentsNewsApp {
             }
         });
 
-        // Add debounced search input listener
+        // Add improved debounced search input listener with duplicate prevention
         const searchInput = document.getElementById('search-input');
         if (searchInput) {
+            let lastSearchQuery = '';
             searchInput.addEventListener('input', this.debounce((e) => {
                 const query = e.target.value.trim();
-                if (query.length >= 3) {
-                    // Auto-search after 3+ characters with 500ms delay
-                    this.debouncedPerformSearch(query);
+                // Only search if query is 3+ chars AND different from last search
+                if (query.length >= 3 && query !== lastSearchQuery) {
+                    lastSearchQuery = query;
+                    console.log(`[UI] Triggering auto-search for: "${query}"`);
+                    // Perform auto-search directly
+                    this.searchQuery = query;
+                    this.currentPage = 1;
+                    this.loadNews({
+                        source: 'search',
+                        query: query,
+                        filters: this.filters,
+                        pageNum: 1
+                    });
                 }
-            }, 500));
+                // Reset last query if user clears the search
+                else if (query.length === 0) {
+                    lastSearchQuery = '';
+                }
+            }, 800)); // Increased debounce delay to prevent excessive API calls
         }
 
         // Advanced filters toggle
@@ -1540,18 +1555,7 @@ class CurrentsNewsApp {
         };
     }
 
-    // Debounced search method
-    async debouncedPerformSearch(query) {
-        this.searchQuery = query;
-        this.currentPage = 1;
 
-        await this.loadNews({
-            source: 'search',
-            query: query,
-            filters: this.filters,
-            pageNum: 1
-        });
-    }
 
     truncateText(text, limit) {
         if (text.length <= limit) return text;
