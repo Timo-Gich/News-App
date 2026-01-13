@@ -1165,15 +1165,12 @@ class CurrentsNewsApp {
             this.articles = result.articles;
             this.currentPage = pageNum;
 
-            // Handle pagination based on result
-            if (result.hasMore === false) {
-                // API explicitly says no more content
+            // Handle pagination based on result - be more permissive
+            if (result.hasMore === false && result.totalResults !== undefined && result.totalResults > 0) {
+                // API explicitly says no more content AND provided valid total results
                 this.hasMorePages = false;
-            } else if (result.totalResults && result.totalResults > 0) {
-                // API provided total results
-                this.hasMorePages = result.totalResults > (pageNum * 12); // Assume 12 articles per page
             } else {
-                // Default: assume more content available
+                // Default: assume more content is available (Currents API has vast content)
                 this.hasMorePages = true;
             }
 
