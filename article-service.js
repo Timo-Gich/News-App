@@ -1,4 +1,4 @@
-// article-service.js - Single Article Fetch Authority
+// article-service.js - Central Article Coordinator (The Brain)
 
 class ArticleService {
     constructor() {
@@ -6,10 +6,21 @@ class ArticleService {
         this.offlineManager = null;
         this.storage = null;
 
-        // No longer maintain separate state - use ArticleState
+        // State management
+        this.currentPage = 1;
+        this.currentCategory = 'latest';
+        this.currentLanguage = 'en';
         this.isOnline = navigator.onLine;
+        this.searchQuery = '';
+        this.filters = {
+            start_date: '',
+            end_date: '',
+            category: '',
+            domain: '',
+            keywords: ''
+        };
 
-        // Listen for online/offline changes - but don't fetch directly
+        // Listen for online/offline changes
         window.addEventListener('online', () => this.handleOnline());
         window.addEventListener('offline', () => this.handleOffline());
     }
@@ -34,7 +45,7 @@ class ArticleService {
     }
 
     setLanguage(language) {
-        setLanguage(language);
+        this.currentLanguage = language;
         if (this.apiClient) {
             this.apiClient.setLanguage(language);
         }
@@ -43,57 +54,33 @@ class ArticleService {
     // ==================== MAIN PUBLIC API ====================
 
     /**
-     * Get articles - SINGLE FETCH AUTHORITY with deduplication
+     * Get articles - decides between online API, offline storage, or cached data
      * @param {Object} params - { page, category, query, filters }
      * @returns {Promise<Object>} - { articles, source, pageNum, totalResults, hasMore, isCached }
      */
     async getArticles(params = {}) {
         const {
-            page = ArticleState.currentPage,
-            category = ArticleState.category,
-            query = ArticleState.searchQuery,
-            filters = ArticleState.filters
+            page = this.currentPage,
+            category = this.currentCategory,
+            query = this.searchQuery,
+            filters = this.filters
         } = params;
 
-        // RULE #2: Deduplicate identical requests
-        if (shouldSkipFetch({ page, category, query, filters })) {
-            return {
-                articles: [],
-                source: 'duplicate',
-                pageNum: page,
-                isCached: true,
-                skipped: true
-            };
+        // Update current state
+        this.currentPage = page;
+        this.currentCategory = category;
+        this.searchQuery = query;
+        this.filters = { ...this.filters, ...filters };
+
+        console.log(`[ArticleService] Getting articles: page=${page}, category=${category}, query=${query ? query.substring(0, 20) + '...' : 'none'}`);
+
+        // SPECIAL HANDLING: Search requests
+        if (query && query.trim()) {
+            return await this.handleSearchRequest({ page, query, filters });
         }
 
-        // Mark fetch as started
-        startFetch({ page, category, query, filters });
-
-        try {
-            // Update ArticleState with new parameters
-            ArticleState.currentPage = page;
-            ArticleState.category = category;
-            ArticleState.searchQuery = query;
-            ArticleState.filters = { ...filters };
-
-            console.log(`[ArticleService] Fetching articles: page=${page}, category=${category}, query=${query ? query.substring(0, 20) + '...' : 'none'}`);
-
-            // SPECIAL HANDLING: Search requests
-            if (query && query.trim()) {
-                const result = await this.handleSearchRequest({ page, query, filters });
-                updatePagination({ currentPage: page });
-                return result;
-            }
-
-            // STANDARD ARTICLE FETCHING
-            const result = await this.handleArticleRequest({ page, category, filters });
-            updatePagination({ currentPage: page });
-            return result;
-
-        } finally {
-            // Always end fetch
-            endFetch();
-        }
+        // STANDARD ARTICLE FETCHING
+        return await this.handleArticleRequest({ page, category, filters });
     }
 
     /**
