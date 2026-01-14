@@ -1278,25 +1278,40 @@ class CurrentsNewsApp {
         this.updatePagination();
     }
 
-    // Clean pagination - only shows current page and load more when available
+    // Clean pagination - shows Prev/Next buttons
     updatePagination() {
+        const prevBtn = document.getElementById('prev-page');
+        const nextBtn = document.getElementById('next-page');
         const loadMoreBtn = document.getElementById('load-more-btn');
         const pageInfo = document.getElementById('page-info');
+        const currentPageEl = document.getElementById('current-page');
 
         if (!pageInfo) return;
 
-        // Simple pagination visibility rule
-        if (this.hasMorePages) {
-            loadMoreBtn.style.display = 'block';
-            pageInfo.textContent = `Page ${this.currentPage}`;
-        } else {
-            loadMoreBtn.style.display = 'none';
-            pageInfo.textContent = `Page ${this.currentPage} • All articles loaded`;
+        // Update current page display
+        if (currentPageEl) currentPageEl.textContent = this.currentPage;
+
+        // Handle Previous Button
+        if (prevBtn) {
+            prevBtn.style.display = this.currentPage > 1 ? 'inline-flex' : 'none';
         }
 
-        // Update current page display
-        const currentPageEl = document.getElementById('current-page');
-        if (currentPageEl) currentPageEl.textContent = this.currentPage;
+        // Handle Next Button
+        if (nextBtn) {
+            nextBtn.style.display = this.hasMorePages ? 'inline-flex' : 'none';
+        }
+
+        // Hide Load More button as we are using Prev/Next
+        if (loadMoreBtn) {
+            loadMoreBtn.style.display = 'none';
+        }
+
+        // Update page info text
+        if (!this.hasMorePages) {
+            pageInfo.innerHTML = `Page <span id="current-page">${this.currentPage}</span> • All articles loaded`;
+        } else {
+            pageInfo.innerHTML = `Page <span id="current-page">${this.currentPage}</span>`;
+        }
     }
 
     updateDateFilters() {
@@ -1577,12 +1592,17 @@ class CurrentsNewsApp {
     // ==================== DOWNLOAD OFFLINE ARTICLES ====================
     async downloadOfflineArticles() {
         try {
+            const articlesPerPage = this.apiClient.pageSize || 30;
+            // Get dynamic estimates
+            const est15 = await this.offlineManager.storage.estimateDownloadSize(15, articlesPerPage);
+            const est20 = await this.offlineManager.storage.estimateDownloadSize(20, articlesPerPage);
+
             // Prompt user for number of pages to download
             const pageCount = prompt(
                 'How many pages would you like to download for offline reading?\n\n' +
-                'Each page contains ~12 articles.\n' +
-                'Recommended: 15 pages (~70-80 MB)\n' +
-                'Maximum: 20 pages (~100 MB)',
+                `Each page contains ~${articlesPerPage} articles.\n` +
+                `Recommended: 15 pages (~${est15.sizeText})\n` +
+                `Maximum: 20 pages (~${est20.sizeText})`,
                 '15'
             );
 

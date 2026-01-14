@@ -833,12 +833,13 @@ class OfflineStorage {
         if (!articles || articles.length === 0) return 0;
 
         // Estimate size based on article properties
-        const avgArticleSize = 2048; // bytes per article (conservative estimate)
+        // Assuming ~400KB per article (text + potential images)
+        const avgArticleSize = 400 * 1024; 
         const totalSizeBytes = articles.length * avgArticleSize;
         return totalSizeBytes / (1024 * 1024); // Convert to MB
     }
 
-    async estimateDownloadSize(pageCount, articlesPerPage = 12) {
+    async estimateDownloadSize(pageCount, articlesPerPage = 30) {
         const estimatedArticles = pageCount * articlesPerPage;
         const estimatedSize = this.calculateArticlesSize(new Array(estimatedArticles).fill({}));
         return {

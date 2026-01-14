@@ -186,9 +186,15 @@
 
             <!-- Pagination -->
             <div class="pagination" id="pagination">
-                <div class="page-info">
+                <button id="prev-page" class="btn btn-secondary" style="display: none;">
+                    <i class="fas fa-chevron-left"></i> Previous
+                </button>
+                <div class="page-info" id="page-info">
                     Page <span id="current-page">1</span>
                 </div>
+                <button id="next-page" class="btn btn-secondary" style="display: none;">
+                    Next <i class="fas fa-chevron-right"></i>
+                </button>
                 <button id="load-more-btn" class="btn btn-secondary" style="display: none;">
                     <i class="fas fa-plus"></i> Load More Articles
                 </button>

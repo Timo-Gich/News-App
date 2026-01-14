@@ -5,7 +5,7 @@ class APIClient {
         this.baseUrl = baseUrl;
         this.apiKey = apiKey;
         this.language = 'en';
-        this.pageSize = 12;
+        this.pageSize = 30;
 
         // Rate limiting
         this.requestQueue = [];

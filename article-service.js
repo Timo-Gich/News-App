@@ -260,7 +260,7 @@ class ArticleService {
 
         // Step 3: Fallback: Try IndexedDB (all saved articles)
         try {
-            const offlineArticles = await this.storage.getOfflineArticles(12, (page - 1) * 12);
+            const offlineArticles = await this.storage.getOfflineArticles(30, (page - 1) * 30);
             if (offlineArticles && offlineArticles.length > 0) {
                 console.log(`[ArticleService] Using IndexedDB fallback (${offlineArticles.length} articles)`);
                 return {
