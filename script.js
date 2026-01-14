@@ -7,22 +7,9 @@ class CurrentsNewsApp {
         this.apiClient = null;
         this.offlineManager = null;
 
-        // UI State
-        this.currentCategory = 'latest';
-        this.currentLanguage = 'en';
-        this.searchQuery = '';
-        this.filters = {
-            start_date: '',
-            end_date: '',
-            category: '',
-            domain: '',
-            keywords: ''
-        };
+        // UI State - now uses ArticleState for centralized management
         this.articles = [];
         this.hasMorePages = true;
-
-        // Fetch lock to prevent concurrent API calls
-        this.isFetching = false;
 
         // UI elements
         this.isDarkMode = localStorage.getItem('darkMode') === 'true';
@@ -93,11 +80,11 @@ class CurrentsNewsApp {
         this.apiClient.setAPIConfig({
             apiKey: apiKey,
             baseUrl: 'https://api.currentsapi.services/v1',
-            language: this.currentLanguage
+            language: ArticleState.language
         });
 
         // Update article service language
-        this.articleService.setLanguage(this.currentLanguage);
+        this.articleService.setLanguage(ArticleState.language);
     }
 
     // ==================== GITHUB PAGES ERROR HANDLING ====================
@@ -294,15 +281,18 @@ class CurrentsNewsApp {
                 e.preventDefault();
                 const category = e.currentTarget.dataset.category;
                 this.setActiveCategory(category);
+                setCategory(category); // RULE #3: Reset pagination on category change
                 this.loadCategoryNews(category);
             });
         });
 
         // Language change
         addIdListener('language-select', 'change', (e) => {
-            this.currentLanguage = e.target.value;
+            const newLanguage = e.target.value;
+            setLanguage(newLanguage); // Update centralized language
+            resetPagination(); // RULE #3: Reset pagination on language change
             this.updateStats();
-            this.loadCategoryNews(this.currentCategory);
+            this.loadCategoryNews(ArticleState.category);
         });
 
         // Search with debouncing
@@ -326,13 +316,12 @@ class CurrentsNewsApp {
                 if (query.length >= 3 && query !== lastSearchQuery) {
                     lastSearchQuery = query;
                     console.log(`[UI] Triggering auto-search for: "${query}"`);
-                    // Perform auto-search directly
-                    this.searchQuery = query;
-                    this.currentPage = 1;
+                    // RULE #3: Reset pagination on search
+                    setSearchQuery(query);
                     this.loadNews({
                         source: 'search',
                         query: query,
-                        filters: this.filters,
+                        filters: ArticleState.filters,
                         pageNum: 1
                     });
                 }
@@ -368,27 +357,27 @@ class CurrentsNewsApp {
 
         // Pagination
         addIdListener('prev-page', 'click', () => {
-            if (this.currentPage > 1) {
-                this.currentPage--;
+            if (ArticleState.currentPage > 1) {
+                const newPage = ArticleState.currentPage - 1;
                 this.loadNews({
-                    source: this.currentCategory,
-                    category: this.currentCategory,
-                    query: this.searchQuery,
-                    filters: this.filters,
-                    pageNum: this.currentPage
+                    source: ArticleState.category,
+                    category: ArticleState.category,
+                    query: ArticleState.searchQuery,
+                    filters: ArticleState.filters,
+                    pageNum: newPage
                 });
             }
         });
 
         addIdListener('next-page', 'click', () => {
             if (this.hasMorePages !== false) {
-                this.currentPage++;
+                const newPage = ArticleState.currentPage + 1;
                 this.loadNews({
-                    source: this.currentCategory,
-                    category: this.currentCategory,
-                    query: this.searchQuery,
-                    filters: this.filters,
-                    pageNum: this.currentPage
+                    source: ArticleState.category,
+                    category: ArticleState.category,
+                    query: ArticleState.searchQuery,
+                    filters: ArticleState.filters,
+                    pageNum: newPage
                 });
             }
         });
@@ -789,8 +778,8 @@ class CurrentsNewsApp {
     }
 
     async loadOfflineArticles() {
-        this.currentPage = 1;
-        this.searchQuery = '';
+        // RULE #3: Reset pagination for offline view
+        resetPagination();
 
         await this.loadNews({
             source: 'offline',
@@ -1012,13 +1001,13 @@ class CurrentsNewsApp {
             return;
         }
 
-        this.searchQuery = query;
-        this.currentPage = 1;
+        // RULE #3: Reset pagination on search
+        setSearchQuery(query);
 
         await this.loadNews({
             source: 'search',
             query: query,
-            filters: this.filters,
+            filters: ArticleState.filters,
             pageNum: 1
         });
     }
@@ -1027,18 +1016,18 @@ class CurrentsNewsApp {
     async updateStats() {
         // Update offline stats via offline manager
         await this.offlineManager.updateStats();
-        
+
         // Update existing stats
         const articleCount = document.getElementById('article-count');
         const lastUpdated = document.getElementById('last-updated');
         const currentLanguage = document.getElementById('current-language');
-        
+
         if (articleCount) articleCount.textContent = this.articles.length;
-        if (lastUpdated) lastUpdated.textContent = new Date().toLocaleTimeString([], { 
-            hour: '2-digit', 
-            minute: '2-digit' 
+        if (lastUpdated) lastUpdated.textContent = new Date().toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit'
         });
-        
+
         const languageNames = {
             'en': 'English',
             'es': 'Spanish',
@@ -1047,9 +1036,9 @@ class CurrentsNewsApp {
             'it': 'Italian',
             'pt': 'Portuguese'
         };
-        
+
         if (currentLanguage) {
-            currentLanguage.textContent = languageNames[this.currentLanguage] || this.currentLanguage;
+            currentLanguage.textContent = languageNames[ArticleState.language] || ArticleState.language;
         }
     }
 
@@ -1145,12 +1134,6 @@ class CurrentsNewsApp {
     }
 
     async loadNews(params = {}) {
-        // CRITICAL: Prevent concurrent fetches that cause reloading loops
-        if (this.isFetching) {
-            console.log('[UI] Fetch already in progress, skipping duplicate request');
-            return;
-        }
-
         const {
             source = 'latest',
             category = null,
@@ -1159,11 +1142,10 @@ class CurrentsNewsApp {
             pageNum = 1
         } = params;
 
-        this.isFetching = true;
         this.showLoading();
 
         try {
-            // Use ArticleService - the single point of contact for articles
+            // RULE #1: Use ArticleService as the single fetch authority
             const result = await this.articleService.getArticles({
                 page: pageNum,
                 category: category,
@@ -1171,18 +1153,17 @@ class CurrentsNewsApp {
                 filters: filters
             });
 
-            // Store articles and pagination state
-            this.articles = result.articles;
-            this.currentPage = pageNum;
-
-            // Handle pagination based on result - be more permissive
-            if (result.hasMore === false && result.totalResults !== undefined && result.totalResults > 0) {
-                // API explicitly says no more content AND provided valid total results
-                this.hasMorePages = false;
-            } else {
-                // Default: assume more content is available (Currents API has vast content)
-                this.hasMorePages = true;
+            // Skip rendering if this was a duplicate request
+            if (result.skipped) {
+                this.hideLoading();
+                return;
             }
+
+            // Store articles and update UI state
+            this.articles = result.articles;
+
+            // Update pagination UI based on ArticleState
+            this.updatePagination();
 
             // Render articles
             this.renderArticles();
@@ -1211,9 +1192,6 @@ class CurrentsNewsApp {
             }
 
             this.showError(`Failed to load news: ${error.message}`);
-        } finally {
-            // CRITICAL: Always reset the fetch lock
-            this.isFetching = false;
         }
     }
 
@@ -1288,15 +1266,15 @@ class CurrentsNewsApp {
         // Simple pagination visibility rule
         if (this.hasMorePages) {
             loadMoreBtn.style.display = 'block';
-            pageInfo.textContent = `Page ${this.currentPage}`;
+            pageInfo.textContent = `Page ${ArticleState.currentPage}`;
         } else {
             loadMoreBtn.style.display = 'none';
-            pageInfo.textContent = `Page ${this.currentPage} • All articles loaded`;
+            pageInfo.textContent = `Page ${ArticleState.currentPage} • All articles loaded`;
         }
 
         // Update current page display
         const currentPageEl = document.getElementById('current-page');
-        if (currentPageEl) currentPageEl.textContent = this.currentPage;
+        if (currentPageEl) currentPageEl.textContent = ArticleState.currentPage;
     }
 
     updateDateFilters() {
@@ -1485,8 +1463,8 @@ class CurrentsNewsApp {
             return;
         }
 
-        this.searchQuery = query;
-        this.currentPage = 1;
+        // RULE #3: Reset pagination on search
+        setSearchQuery(query);
 
         console.log(`Performing historical search for "${query}" from ${startDate} to ${endDate} (${daysDiff} days)`);
 
@@ -1564,13 +1542,13 @@ class CurrentsNewsApp {
 
     // ==================== LOAD MORE FUNCTIONALITY ====================
     async loadMoreArticles() {
-        this.currentPage++;
+        const newPage = ArticleState.currentPage + 1;
         await this.loadNews({
-            source: this.currentCategory,
-            category: this.currentCategory,
-            query: this.searchQuery,
-            filters: this.filters,
-            pageNum: this.currentPage
+            source: ArticleState.category,
+            category: ArticleState.category,
+            query: ArticleState.searchQuery,
+            filters: ArticleState.filters,
+            pageNum: newPage
         });
     }
 

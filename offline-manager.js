@@ -70,16 +70,13 @@ class OfflineManager {
     }
 
     async handleOnline() {
-        console.log('Network: Online');
+        console.log('[OfflineManager] Network: Online');
         this.isOnline = true;
         this.disableOfflineMode();
         this.hideOfflineIndicator();
 
-        // Try to sync pending actions
-        await this.syncPendingActions();
-
-        // Update cache in background
-        this.updateCacheInBackground();
+        // RULE #4: Don't fetch directly - request refresh instead
+        // Background sync will be handled by ArticleService when needed
 
         // Update stats
         await this.updateStats();
@@ -89,7 +86,7 @@ class OfflineManager {
     }
 
     async handleOffline() {
-        console.log('Network: Offline');
+        console.log('[OfflineManager] Network: Offline');
         this.isOnline = false;
         this.enableOfflineMode();
         this.showOfflineIndicator();
