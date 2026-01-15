@@ -1144,7 +1144,7 @@ class CurrentsNewsApp {
         });
     }
 
-    async loadNews(params = {}, append = false) {
+    async loadNews(params = {}) {
         // CRITICAL: Prevent concurrent fetches that cause reloading loops
         if (this.isFetching) {
             console.log('[UI] Fetch already in progress, skipping duplicate request');
@@ -1172,11 +1172,7 @@ class CurrentsNewsApp {
             });
 
             // Store articles and pagination state
-            if (append) {
-                this.articles = [...this.articles, ...result.articles];
-            } else {
-                this.articles = result.articles;
-            }
+            this.articles = result.articles;
             this.currentPage = pageNum;
 
             // Handle pagination based on result - be more permissive
@@ -1189,7 +1185,7 @@ class CurrentsNewsApp {
             }
 
             // Render articles
-            this.renderArticles(result.articles, append);
+            this.renderArticles();
             this.hideLoading();
             this.updateStats();
             this.hideError();
@@ -1254,27 +1250,23 @@ class CurrentsNewsApp {
     // DEPRECATED: loadArticles() - No longer used with unified pagination
     // Kept for backward compatibility but replaced by direct loadNews() calls
 
-    renderArticles(articles = null, append = false) {
+    renderArticles(articles = null) {
         const container = document.getElementById('news-grid');
         if (!container) return;
 
         // FIX 2: Stop slicing already-paged data - fetchArticles() already returns one page
         const articlesToRender = articles || this.articles;
 
-        if (!append) {
-            container.innerHTML = '';
-        }
+        container.innerHTML = '';
 
         if (articlesToRender.length === 0) {
-            if (!append) {
-                container.innerHTML = `
-                    <div class="no-articles" style="text-align: center; padding: 40px 20px;">
-                        <i class="fas fa-newspaper" style="font-size: 48px; color: var(--text-secondary); margin-bottom: 15px;"></i>
-                        <h3>No articles found</h3>
-                        <p>Try adjusting your search or filters.</p>
-                    </div>
-                `;
-            }
+            container.innerHTML = `
+                <div class="no-articles" style="text-align: center; padding: 40px 20px;">
+                    <i class="fas fa-newspaper" style="font-size: 48px; color: var(--text-secondary); margin-bottom: 15px;"></i>
+                    <h3>No articles found</h3>
+                    <p>Try adjusting your search or filters.</p>
+                </div>
+            `;
             return;
         }
 
@@ -1301,17 +1293,17 @@ class CurrentsNewsApp {
 
         // Handle Previous Button
         if (prevBtn) {
-            prevBtn.style.display = 'none';
+            prevBtn.style.display = this.currentPage > 1 ? 'inline-flex' : 'none';
         }
 
         // Handle Next Button
         if (nextBtn) {
-            nextBtn.style.display = 'none';
+            nextBtn.style.display = this.hasMorePages ? 'inline-flex' : 'none';
         }
 
-        // Show Load More button
+        // Hide Load More button as we are using Prev/Next
         if (loadMoreBtn) {
-            loadMoreBtn.style.display = this.hasMorePages ? 'inline-flex' : 'none';
+            loadMoreBtn.style.display = 'none';
         }
 
         // Update page info text
@@ -1594,7 +1586,7 @@ class CurrentsNewsApp {
             query: this.searchQuery,
             filters: this.filters,
             pageNum: this.currentPage
-        }, true);
+        });
     }
 
     // ==================== DOWNLOAD OFFLINE ARTICLES ====================
