@@ -370,7 +370,6 @@ class CurrentsNewsApp {
         addIdListener('prev-page', 'click', () => {
             if (this.currentPage > 1) {
                 this.currentPage--;
-                console.log(`[UI] Going to previous page: ${this.currentPage}`);
                 this.loadNews({
                     source: this.currentCategory,
                     category: this.currentCategory,
@@ -378,24 +377,19 @@ class CurrentsNewsApp {
                     filters: this.filters,
                     pageNum: this.currentPage
                 });
-            } else {
-                this.showToast('You are on the first page', 'info');
             }
         });
 
         addIdListener('next-page', 'click', () => {
             if (this.hasMorePages !== false) {
-                const nextPage = this.currentPage + 1;
-                console.log(`[UI] Going to next page: ${nextPage}`);
+                this.currentPage++;
                 this.loadNews({
                     source: this.currentCategory,
                     category: this.currentCategory,
                     query: this.searchQuery,
                     filters: this.filters,
-                    pageNum: nextPage
+                    pageNum: this.currentPage
                 });
-            } else {
-                this.showToast('No more articles available', 'info');
             }
         });
 
@@ -1223,8 +1217,8 @@ class CurrentsNewsApp {
         }
     }
 
-    buildApiUrl(category, page = 1) {
-        let url = `${this.baseUrl}/latest-news?language=${this.currentLanguage}&page=${page}`;
+    buildApiUrl(category) {
+        let url = `${this.baseUrl}/latest-news?language=${this.currentLanguage}`;
         
         // Add API key
         if (this.apiKey) {
