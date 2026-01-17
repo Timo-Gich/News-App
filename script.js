@@ -1626,7 +1626,7 @@ class CurrentsNewsApp {
 
             // Start manual download using ArticleService
             const result = await this.articleService.downloadForOffline({
-                category: 'latest',
+                category: ['latest', 'world', 'politics'],
                 pages: count
             });
 
