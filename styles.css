@@ -1,9 +1,42 @@
-/* Reset & Base Styles */
+/* Reset & Base Styles - Performance Optimized */
 
 * {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
+}
+
+/* Performance: Reduce layout thrashing */
+html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+}
+
+/* Critical CSS for above-the-fold content */
+body {
+    font-family: 'Roboto', sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    line-height: 1.6;
+    transition: var(--transition);
+    overflow-x: hidden;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    /* Performance: Enable smooth scrolling */
+    scroll-behavior: smooth;
+    /* Performance: Contain layout */
+    contain: layout;
+}
+
+.container {
+    width: 100%;
+    max-width: var(--container-width);
+    padding: 0 15px;
+    margin: 0 auto;
+    /* Performance: Contain layout */
+    contain: content;
 }
 
 :root {
@@ -417,13 +450,104 @@ h6 {
 }
 
 
-/* News Grid */
+/* News Grid - Performance Optimized */
 
 .news-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
     gap: 30px;
     margin-bottom: 40px;
+    /* Performance: Contain layout to prevent reflows */
+    contain: layout;
+}
+
+/* News Card - CLS Optimized */
+.news-card {
+    background-color: var(--card-bg);
+    border-radius: var(--border-radius);
+    overflow: hidden;
+    box-shadow: var(--card-shadow);
+    transition: var(--transition);
+    cursor: pointer;
+    min-height: auto;
+    height: auto;
+    display: flex;
+    flex-direction: column;
+    break-inside: avoid;
+    /* Performance: Contain content to prevent layout shifts */
+    contain: content;
+    /* Performance: Will-change for smoother animations */
+    will-change: transform, box-shadow;
+}
+
+/* Image Container - CLS Prevention */
+.news-image {
+    height: auto;
+    min-height: 200px;
+    width: 100%;
+    overflow: hidden;
+    aspect-ratio: 16/9;
+    /* Performance: Reserve space for images */
+    position: relative;
+    background: linear-gradient(135deg, #f5f5f5 0%, #e0e0e0 100%);
+    /* Performance: Add skeleton loader effect */
+    background-size: 200% 100%;
+    animation: skeleton-loading 1.5s infinite ease-in-out;
+}
+
+/* Skeleton Loading Animation */
+@keyframes skeleton-loading {
+    0% {
+        background-position: 100% 50%;
+    }
+    100% {
+        background-position: 0% 50%;
+    }
+}
+
+/* Image Loading Optimization */
+.news-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.5s ease;
+    /* Performance: Prevent layout shift during load */
+    position: absolute;
+    top: 0;
+    left: 0;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.news-image img.loaded {
+    opacity: 1;
+}
+
+.news-card:hover .news-image img {
+    transform: scale(1.05);
+}
+
+/* No Image Placeholder */
+.no-image {
+    height: 200px;
+    background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    /* Performance: Prevent layout shift */
+    aspect-ratio: 16/9;
+}
+
+/* Content Container - Layout Stability */
+.news-content {
+    padding: 20px;
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    /* Performance: Prevent text reflow */
+    min-height: 150px;
 }
 
 .news-card {

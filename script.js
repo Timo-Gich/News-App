@@ -40,6 +40,9 @@ class CurrentsNewsApp {
         // Initialize services
         await this.initServices();
 
+        // Set up performance optimizations
+        this.setupPerformanceOptimizations();
+
         // Check for saved API key
         const savedKey = localStorage.getItem('currents_api_key');
         if (savedKey) {
@@ -148,6 +151,150 @@ class CurrentsNewsApp {
                 this.showToast('PWA manifest failed to load. App may not install properly.', 'warning');
             });
         }
+    }
+
+    // ==================== PERFORMANCE OPTIMIZATIONS ====================
+    setupPerformanceOptimizations() {
+        // Set up Intersection Observer for lazy loading
+        this.setupLazyLoadingObserver();
+
+        // Preload critical images
+        this.preloadCriticalImages();
+
+        // Optimize font loading
+        this.optimizeFontLoading();
+
+        console.log('[Performance] Optimizations initialized');
+    }
+
+    setupLazyLoadingObserver() {
+        // Use Intersection Observer for lazy loading images
+        if ('IntersectionObserver' in window) {
+            this.lazyLoadObserver = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        const img = entry.target;
+                        this.loadImage(img);
+                        this.lazyLoadObserver.unobserve(img);
+                    }
+                });
+            }, {
+                rootMargin: '200px',
+                threshold: 0.01
+            });
+        } else {
+            // Fallback for browsers without Intersection Observer
+            this.fallbackLazyLoading();
+        }
+    }
+
+    loadImage(img) {
+        // Skip if already loaded
+        if (img.classList.contains('loaded')) return;
+
+        // Get data-src attribute
+        const dataSrc = img.getAttribute('data-src');
+        if (dataSrc) {
+            img.src = dataSrc;
+            img.removeAttribute('data-src');
+
+            // Add fade-in effect
+            img.style.transition = 'opacity 0.3s ease';
+            img.style.opacity = '0';
+
+            // When image is loaded
+            img.onload = () => {
+                img.classList.add('loaded');
+                img.style.opacity = '1';
+
+                // Remove skeleton loading animation
+                const imageContainer = img.closest('.news-image');
+                if (imageContainer) {
+                    imageContainer.style.animation = 'none';
+                    imageContainer.style.background = 'none';
+                }
+            };
+
+            // Handle error
+            img.onerror = () => {
+                img.classList.add('loaded');
+                img.style.opacity = '1';
+                img.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"%3E%3Crect width="100" height="100" fill="%23f5f5f5"/%3E%3Ctext x="50" y="50" text-anchor="middle" dy="0.3em" font-family="Arial" font-size="12" fill="%23999"%3EImage failed to load%3C/text%3E%3C/svg%3E';
+            };
+        }
+    }
+
+    setupLazyLoading(card) {
+        // Find all lazy load images in the card
+        const lazyImages = card.querySelectorAll('img.lazy-load');
+        lazyImages.forEach(img => {
+            if (this.lazyLoadObserver) {
+                this.lazyLoadObserver.observe(img);
+            } else {
+                // Fallback: load immediately if no Intersection Observer
+                this.loadImage(img);
+            }
+        });
+    }
+
+    fallbackLazyLoading() {
+        // Fallback for browsers without Intersection Observer
+        const lazyImages = document.querySelectorAll('img.lazy-load');
+        lazyImages.forEach(img => {
+            if (this.isElementInViewport(img)) {
+                this.loadImage(img);
+            }
+        });
+
+        // Add scroll event listener
+        window.addEventListener('scroll', () => {
+            lazyImages.forEach(img => {
+                if (this.isElementInViewport(img)) {
+                    this.loadImage(img);
+                }
+            });
+        }, { passive: true });
+    }
+
+    isElementInViewport(el) {
+        const rect = el.getBoundingClientRect();
+        return (
+            rect.top <= (window.innerHeight || document.documentElement.clientHeight) * 1.5 &&
+            rect.bottom >= 0 &&
+            rect.left <= (window.innerWidth || document.documentElement.clientWidth) * 1.5 &&
+            rect.right >= 0
+        );
+    }
+
+    preloadCriticalImages() {
+        // Preload first few article images for better LCP
+        const firstCards = document.querySelectorAll('.news-card:not(.loaded)');
+        if (firstCards.length > 0) {
+            // Preload first 3 images
+            for (let i = 0; i < Math.min(3, firstCards.length); i++) {
+                const card = firstCards[i];
+                const img = card.querySelector('img.lazy-load');
+                if (img) {
+                    this.loadImage(img);
+                }
+            }
+        }
+    }
+
+    optimizeFontLoading() {
+        // Add font display swap to prevent FOIT
+        const style = document.createElement('style');
+        style.textContent = `
+            @font-face {
+                font-family: 'Roboto';
+                font-display: swap;
+            }
+            @font-face {
+                font-family: 'Poppins';
+                font-display: swap;
+            }
+        `;
+        document.head.appendChild(style);
     }
 
     // ==================== THEME MANAGEMENT ====================
@@ -1626,7 +1773,7 @@ class CurrentsNewsApp {
 
             // Start manual download using ArticleService
             const result = await this.articleService.downloadForOffline({
-                category: 'latest',
+                category: ['latest', 'world', 'politics'],
                 pages: count
             });
 
