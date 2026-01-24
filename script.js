@@ -56,6 +56,9 @@ class CurrentsNewsApp {
         // Update dates for filters
         this.updateDateFilters();
 
+        // Setup scroll to top functionality
+        this.setupScrollToTop();
+
         // Enhanced error handling for GitHub Pages
         this.setupGitHubPagesErrorHandling();
     }
@@ -546,6 +549,24 @@ class CurrentsNewsApp {
             this.hideInstallButton();
             this.showToast('App installed successfully!', 'success');
             this.deferredPrompt = null;
+        });
+    }
+
+    // ==================== SCROLL TO TOP ====================
+    setupScrollToTop() {
+        const scrollBtn = document.getElementById('scroll-top-btn');
+        if (!scrollBtn) return;
+
+        window.addEventListener('scroll', () => {
+            if (window.scrollY > 500) {
+                scrollBtn.classList.add('show');
+            } else {
+                scrollBtn.classList.remove('show');
+            }
+        });
+
+        scrollBtn.addEventListener('click', () => {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
         });
     }
 
