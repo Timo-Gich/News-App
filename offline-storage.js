@@ -3,7 +3,7 @@
 class OfflineStorage {
     constructor() {
         this.dbName = 'CurrentsNewsDB';
-        this.version = 2;
+        this.version = 3;
         this.db = null;
         this.isAvailable = 'indexedDB' in window;
         this.maxStorageDays = 30;
@@ -75,6 +75,13 @@ class OfflineStorage {
                 // Create settings store
                 if (!db.objectStoreNames.contains('settings')) {
                     db.createObjectStore('settings', { keyPath: 'key' });
+                }
+
+                // Create comments store (Version 3)
+                if (!db.objectStoreNames.contains('comments')) {
+                    const commentsStore = db.createObjectStore('comments', { keyPath: 'id', autoIncrement: true });
+                    commentsStore.createIndex('articleId', 'articleId');
+                    commentsStore.createIndex('timestamp', 'timestamp');
                 }
 
                 // Migrate from version 1 to 2
@@ -941,5 +948,64 @@ class OfflineStorage {
             console.error('Error clearing search cache:', error);
             return 0;
         }
+    }
+
+    // ===== COMMENTS SYSTEM =====
+
+    async addComment(comment) {
+        if (!this.db) return null;
+
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction(['comments'], 'readwrite');
+            const store = transaction.objectStore('comments');
+
+            const request = store.add(comment);
+
+            request.onsuccess = () => {
+                resolve({ ...comment, id: request.result });
+            };
+
+            request.onerror = (event) => {
+                console.error('Error adding comment:', event.target.error);
+                reject(event.target.error);
+            };
+        });
+    }
+
+    async getComments(articleId) {
+        if (!this.db) return [];
+
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction(['comments'], 'readonly');
+            const store = transaction.objectStore('comments');
+            const index = store.index('articleId');
+            const request = index.getAll(articleId);
+
+            request.onsuccess = () => {
+                // Sort by timestamp descending (newest first)
+                const comments = request.result.sort((a, b) => 
+                    new Date(b.timestamp) - new Date(a.timestamp)
+                );
+                resolve(comments);
+            };
+
+            request.onerror = (event) => {
+                console.error('Error getting comments:', event.target.error);
+                reject(event.target.error);
+            };
+        });
+    }
+
+    async deleteComment(id) {
+        if (!this.db) return false;
+
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction(['comments'], 'readwrite');
+            const store = transaction.objectStore('comments');
+            const request = store.delete(id);
+
+            request.onsuccess = () => resolve(true);
+            request.onerror = (event) => reject(event.target.error);
+        });
     }
 }

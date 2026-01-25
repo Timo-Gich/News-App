@@ -829,5 +829,36 @@ class OfflineManager {
         // Implementation would need to track active downloads
     }
 
+    // ===== COMMENTS MANAGER =====
+
+    async addComment(articleId, text, author = 'You') {
+        try {
+            const comment = {
+                articleId,
+                text,
+                author,
+                timestamp: new Date().toISOString(),
+                likes: 0
+            };
+            return await this.storage.addComment(comment);
+        } catch (error) {
+            console.error('Failed to add comment:', error);
+            return null;
+        }
+    }
+
+    async getComments(articleId) {
+        return await this.storage.getComments(articleId);
+    }
+
+    async deleteComment(commentId) {
+        try {
+            return await this.storage.deleteComment(commentId);
+        } catch (error) {
+            console.error('Failed to delete comment:', error);
+            return false;
+        }
+    }
+
     // ===== END OF OFFLINEMANAGER =====
 }

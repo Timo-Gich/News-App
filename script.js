@@ -264,6 +264,9 @@ class CurrentsNewsApp {
         this.setupTTSButton(article);
         this.setupFontControls();
 
+        // Setup Comments
+        this.setupComments(article.id);
+
         // Show modal
         document.getElementById('article-modal').classList.add('show');
     }
@@ -389,6 +392,120 @@ class CurrentsNewsApp {
                 btn.classList.remove('btn-primary', 'speaking-pulse');
             }
         }
+    }
+
+    // ==================== COMMENTS SYSTEM ====================
+    setupComments(articleId) {
+        const modalBody = document.querySelector('.modal-body');
+        let commentsSection = document.getElementById('comments-section');
+
+        // Remove existing comments section if any (to reset state)
+        if (commentsSection) {
+            commentsSection.remove();
+        }
+
+        // Create new comments section
+        commentsSection = document.createElement('div');
+        commentsSection.id = 'comments-section';
+        commentsSection.className = 'comments-section';
+        commentsSection.innerHTML = `
+            <div class="comments-header">
+                <h3><i class="fas fa-comments"></i> Discussion</h3>
+                <span class="comment-count" id="comment-count">0 comments</span>
+            </div>
+            
+            <div class="comment-form">
+                <textarea id="comment-input" placeholder="Join the discussion..."></textarea>
+                <div class="comment-form-actions">
+                    <button class="btn btn-primary" id="submit-comment">Post Comment</button>
+                </div>
+            </div>
+            
+            <div id="comments-list" class="comment-list">
+                <div class="loading-comments"><i class="fas fa-spinner fa-spin"></i> Loading comments...</div>
+            </div>
+        `;
+
+        modalBody.appendChild(commentsSection);
+
+        // Add event listener for submit
+        document.getElementById('submit-comment').addEventListener('click', () => {
+            this.submitComment(articleId);
+        });
+
+        // Load comments
+        this.loadComments(articleId);
+    }
+
+    async loadComments(articleId) {
+        const container = document.getElementById('comments-list');
+        const countEl = document.getElementById('comment-count');
+        
+        try {
+            const comments = await this.offlineManager.getComments(articleId);
+            
+            if (countEl) countEl.textContent = `${comments.length} comment${comments.length !== 1 ? 's' : ''}`;
+            container.innerHTML = '';
+
+            if (comments.length === 0) {
+                container.innerHTML = '<p class="no-comments">No comments yet. Be the first to share your thoughts!</p>';
+                return;
+            }
+
+            comments.forEach(comment => {
+                const date = new Date(comment.timestamp).toLocaleDateString(undefined, {
+                    month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                });
+
+                const el = document.createElement('div');
+                el.className = 'comment-item';
+                el.innerHTML = `
+                    <div class="comment-meta">
+                        <div class="comment-author">
+                            <div class="comment-avatar">${comment.author.charAt(0)}</div>
+                            ${comment.author}
+                        </div>
+                        <span>${date}</span>
+                    </div>
+                    <div class="comment-text">${this.escapeHtml(comment.text)}</div>
+                    <div class="comment-actions">
+                        <button class="comment-action-btn delete" onclick="newsApp.deleteComment('${comment.id}', '${articleId}')">
+                            <i class="fas fa-trash-alt"></i> Delete
+                        </button>
+                    </div>
+                `;
+                container.appendChild(el);
+            });
+        } catch (error) {
+            console.error('Error loading comments:', error);
+            container.innerHTML = '<p class="error-text">Failed to load comments.</p>';
+        }
+    }
+
+    async submitComment(articleId) {
+        const input = document.getElementById('comment-input');
+        const text = input.value.trim();
+
+        if (!text) return;
+
+        await this.offlineManager.addComment(articleId, text);
+        input.value = '';
+        this.loadComments(articleId);
+        this.showToast('Comment posted!', 'success');
+    }
+
+    async deleteComment(commentId, articleId) {
+        if (confirm('Are you sure you want to delete this comment?')) {
+            await this.offlineManager.deleteComment(parseInt(commentId));
+            this.loadComments(articleId);
+            this.showToast('Comment deleted', 'info');
+        }
+    }
+
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
 
     showInstallButton() {
