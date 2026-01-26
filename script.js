@@ -28,11 +28,6 @@ class CurrentsNewsApp {
         this.isDarkMode = localStorage.getItem('darkMode') === 'true';
         this.deferredPrompt = null;
 
-        // Feature State
-        this.speechSynthesis = window.speechSynthesis;
-        this.isSpeaking = false;
-        this.currentFontSize = 16;
-
         // Initialize the app
         this.init();
     }
@@ -194,7 +189,6 @@ class CurrentsNewsApp {
     }
 
     hideArticleModal() {
-        this.stopSpeech();
         document.getElementById('article-modal').classList.remove('show');
     }
 
@@ -228,14 +222,10 @@ class CurrentsNewsApp {
             article.category.join(', ') :
             'General';
 
-        // Calculate reading time
-        const textLength = (article.title || '').length + (article.description || '').length;
-        const readingTime = Math.ceil(textLength / 5 / 200); // Approx 5 chars/word, 200 wpm
-
         // Update modal content
         document.getElementById('modal-title').textContent = article.title;
         document.getElementById('modal-source').innerHTML = `<i class="fas fa-globe"></i> ${domain}`;
-        document.getElementById('modal-date').innerHTML = `<i class="far fa-clock"></i> ${formattedDate} • ${readingTime} min read`;
+        document.getElementById('modal-date').innerHTML = `<i class="far fa-clock"></i> ${formattedDate}`;
         document.getElementById('modal-author').innerHTML = article.author ?
             `<i class="fas fa-user"></i> ${article.author}` :
             `<i class="fas fa-user"></i> Unknown Author`;
@@ -256,139 +246,8 @@ class CurrentsNewsApp {
 
         document.getElementById('modal-read-full').href = article.url;
 
-        // Reset and Apply Font Size
-        this.currentFontSize = 16;
-        this.updateModalFontSize();
-
-        // Setup Feature Controls
-        this.setupTTSButton(article);
-        this.setupFontControls();
-
         // Show modal
         document.getElementById('article-modal').classList.add('show');
-    }
-
-    // ==================== FEATURE METHODS ====================
-    setupTTSButton(article) {
-        const modalActions = document.querySelector('.modal-actions');
-        let ttsBtn = document.getElementById('modal-tts');
-
-        // Create button if it doesn't exist
-        if (!ttsBtn && modalActions) {
-            ttsBtn = document.createElement('button');
-            ttsBtn.id = 'modal-tts';
-            ttsBtn.className = 'btn btn-secondary';
-            // Insert as the first action
-            modalActions.insertBefore(ttsBtn, modalActions.firstChild);
-        }
-
-        if (ttsBtn) {
-            ttsBtn.innerHTML = '<i class="fas fa-volume-up"></i> Listen';
-            ttsBtn.onclick = () => this.toggleSpeech(article);
-            ttsBtn.className = 'btn btn-secondary'; // Reset class
-        }
-    }
-
-    setupFontControls() {
-        const header = document.querySelector('.modal-header');
-        let controls = document.getElementById('font-controls');
-
-        if (!controls && header) {
-            controls = document.createElement('div');
-            controls.id = 'font-controls';
-            controls.className = 'font-controls';
-            controls.innerHTML = `
-                <button class="btn-icon-circle" id="font-decrease" title="Decrease font size"><i class="fas fa-minus"></i></button>
-                <span class="font-size-indicator">Aa</span>
-                <button class="btn-icon-circle" id="font-increase" title="Increase font size"><i class="fas fa-plus"></i></button>
-            `;
-
-            // Insert before the close button
-            const closeBtn = header.querySelector('.modal-close');
-            if (closeBtn) {
-                header.insertBefore(controls, closeBtn);
-            } else {
-                header.appendChild(controls);
-            }
-
-            // Add listeners
-            document.getElementById('font-decrease').addEventListener('click', () => this.adjustFontSize(-2));
-            document.getElementById('font-increase').addEventListener('click', () => this.adjustFontSize(2));
-        }
-    }
-
-    adjustFontSize(delta) {
-        this.currentFontSize = Math.max(12, Math.min(24, this.currentFontSize + delta));
-        this.updateModalFontSize();
-    }
-
-    updateModalFontSize() {
-        const desc = document.getElementById('modal-description');
-        if (desc) {
-            desc.style.fontSize = `${this.currentFontSize}px`;
-            desc.style.lineHeight = '1.6';
-        }
-    }
-
-    toggleSpeech(article) {
-        if (this.isSpeaking) {
-            this.stopSpeech();
-        } else {
-            const text = `${article.title}. ${article.description || 'No description available.'}`;
-            this.speak(text);
-        }
-    }
-
-    speak(text) {
-        if (!this.speechSynthesis) {
-            this.showToast('Text-to-speech not supported in this browser', 'error');
-            return;
-        }
-
-        this.stopSpeech();
-
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = this.currentLanguage === 'en' ? 'en-US' : this.currentLanguage;
-        utterance.rate = 1.0;
-        utterance.pitch = 1.0;
-
-        utterance.onend = () => {
-            this.isSpeaking = false;
-            this.updateTTSButtonState();
-        };
-
-        utterance.onerror = (e) => {
-            console.error('Speech error:', e);
-            this.isSpeaking = false;
-            this.updateTTSButtonState();
-        };
-
-        this.isSpeaking = true;
-        this.updateTTSButtonState();
-        this.speechSynthesis.speak(utterance);
-    }
-
-    stopSpeech() {
-        if (this.speechSynthesis) {
-            this.speechSynthesis.cancel();
-        }
-        this.isSpeaking = false;
-        this.updateTTSButtonState();
-    }
-
-    updateTTSButtonState() {
-        const btn = document.getElementById('modal-tts');
-        if (btn) {
-            if (this.isSpeaking) {
-                btn.innerHTML = '<i class="fas fa-stop"></i> Stop';
-                btn.classList.remove('btn-secondary');
-                btn.classList.add('btn-primary', 'speaking-pulse');
-            } else {
-                btn.innerHTML = '<i class="fas fa-volume-up"></i> Listen';
-                btn.classList.add('btn-secondary');
-                btn.classList.remove('btn-primary', 'speaking-pulse');
-            }
-        }
     }
 
     showInstallButton() {
@@ -1067,10 +926,6 @@ class CurrentsNewsApp {
             ? article.category.join(', ') 
             : 'General';
         
-        // Calculate reading time
-        const textLength = (article.title || '').length + (article.description || '').length;
-        const readingTime = Math.ceil(textLength / 5 / 200);
-        
         // Check if article is available offline
         const offlineArticle = await this.offlineManager.getArticleWithOfflineStatus(article.id);
         const isAvailableOffline = offlineArticle ? offlineArticle.availableOffline : false;
@@ -1081,7 +936,7 @@ class CurrentsNewsApp {
         // Update modal content
         document.getElementById('modal-title').textContent = article.title;
         document.getElementById('modal-source').innerHTML = `<i class="fas fa-globe"></i> ${domain}`;
-        document.getElementById('modal-date').innerHTML = `<i class="far fa-clock"></i> ${formattedDate} • ${readingTime} min read`;
+        document.getElementById('modal-date').innerHTML = `<i class="far fa-clock"></i> ${formattedDate}`;
         document.getElementById('modal-author').innerHTML = article.author ? 
             `<i class="fas fa-user"></i> ${article.author}` : 
             `<i class="fas fa-user"></i> Unknown Author`;
@@ -1107,14 +962,6 @@ class CurrentsNewsApp {
             article.description || 'No description available for this article.';
         
         document.getElementById('modal-read-full').href = article.url;
-
-        // Reset and Apply Font Size
-        this.currentFontSize = 16;
-        this.updateModalFontSize();
-
-        // Setup Feature Controls
-        this.setupTTSButton(article);
-        this.setupFontControls();
         
         // Update bookmark button
         const bookmarkBtn = document.getElementById('modal-bookmark');
